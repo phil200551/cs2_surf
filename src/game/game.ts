@@ -85,6 +85,11 @@ export class Game {
     return this.stageDef(stage).yaw * DEG;
   }
 
+  /** Spawn pitch of a stage in radians. */
+  spawnPitch(stage: number): number {
+    return (this.stageDef(stage).pitch ?? 0) * DEG;
+  }
+
   private stageDef(stage: number) {
     return this.map.def.stages.find((st) => st.index === stage) ?? this.map.def.stages[0];
   }

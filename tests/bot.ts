@@ -70,9 +70,17 @@ export class SurfBot {
     const sign = info.ramp.ride === 'right' ? 1 : -1;
     const lateral = rampCoords(info, p.x, p.z).lateral * sign;
     const into = info.ramp.ride === 'right' ? -1 : 1;
-    if (lateral > this.targetLateral + 40) input.side = into;
-    else if (lateral < this.targetLateral - 80 && !game.player.touched) input.side = -into;
-    else input.side = lateral > this.targetLateral ? into : 0;
+    if (game.player.touched) {
+      // On the face: hold into it below the line, let go above it.
+      input.side = lateral > this.targetLateral ? into : 0;
+    } else {
+      // In the air: steer the sideways drift toward the line (at most 30 u/s
+      // either way, the air-acceleration cap), with a little damping.
+      const v = game.player.vel;
+      const lateralVel = (v.x * info.rightX + v.z * info.rightZ) * sign;
+      const desired = Math.max(-30, Math.min(30, (this.targetLateral - lateral) * 0.5));
+      input.side = lateralVel < desired - 4 ? -into : lateralVel > desired + 4 ? into : 0;
+    }
     return info;
   }
 }

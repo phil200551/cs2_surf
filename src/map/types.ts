@@ -85,6 +85,8 @@ export interface StageDef {
   spawn: V3;
   /** Spawn view yaw in degrees (0 = -Z, + turns left). */
   yaw: number;
+  /** Spawn view pitch in degrees (+ up). */
+  pitch?: number;
 }
 
 /** Sun direction as azimuth/elevation in degrees (azimuth 0 = toward -Z, + to the left). */

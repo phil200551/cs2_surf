@@ -84,7 +84,10 @@ function trimEdges(p: Primitive, brush: Brush, visible: boolean[]): number[][] {
       // The neighbouring face shares this edge (with opposite winding).
       const gi = brush.faces.findIndex((g, k) => k !== fi && g.vertices.some((v) => samePoint(v, a)) && g.vertices.some((v) => samePoint(v, b)));
       if (gi < 0 || !visible[gi]) continue;
-      if (Math.max(f.normal.y, brush.faces[gi].normal.y) > 0.1) out[fi].push(i);
+      const g = brush.faces[gi];
+      // Only real edges (not near-flat creases), and only where a face looks up.
+      const crease = f.normal.x * g.normal.x + f.normal.y * g.normal.y + f.normal.z * g.normal.z;
+      if (crease < 0.985 && Math.max(f.normal.y, g.normal.y) > 0.1) out[fi].push(i);
     }
   });
   return out;

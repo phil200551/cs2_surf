@@ -1,4 +1,4 @@
-import { AdditiveBlending, BoxGeometry, Color, DoubleSide, Group, Mesh, ShaderMaterial, UniformsLib, UniformsUtils, Vector3 } from 'three';
+import { AdditiveBlending, BoxGeometry, Color, DoubleSide, Group, Mesh, ShaderMaterial, Vector3 } from 'three';
 import type { CompiledMap } from '../map/compile';
 import type { TriggerKind } from '../map/types';
 
@@ -12,7 +12,6 @@ export const ZONE_COLORS: Partial<Record<TriggerKind, number>> = {
 
 const vertexShader = /* glsl */ `
   #include <common>
-  #include <fog_pars_vertex>
   #include <logdepthbuf_pars_vertex>
   varying vec3 vLocal;
   varying vec3 vWorld;
@@ -22,15 +21,14 @@ const vertexShader = /* glsl */ `
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
     gl_Position = projectionMatrix * mvPosition;
     #include <logdepthbuf_vertex>
-    #include <fog_vertex>
   }
 `;
 
 const fragmentShader = /* glsl */ `
   #include <common>
-  #include <fog_pars_fragment>
   #include <logdepthbuf_pars_fragment>
   uniform vec3 uColor;
+  uniform float uFogDensity;
   uniform vec3 uHalf;
   uniform float uTime;
   uniform float uIntensity;
@@ -53,8 +51,10 @@ const fragmentShader = /* glsl */ `
     // tints the view instead of whiting it out.
     float near = smoothstep(60.0, 700.0, distance(cameraPosition, vWorld));
     float a = clamp(edge * 0.9 + fill, 0.0, 1.0) * (0.25 + 0.75 * near);
-    gl_FragColor = vec4(uColor * a * uIntensity, 1.0);
-    #include <fog_fragment>
+    // Additive glow fades to nothing with distance (fog for additive light).
+    float dist = distance(cameraPosition, vWorld);
+    float fog = exp(-uFogDensity * uFogDensity * dist * dist);
+    gl_FragColor = vec4(uColor * a * uIntensity * fog, 1.0);
   }
 `;
 
@@ -63,7 +63,7 @@ export class ZoneMeshes {
   readonly group = new Group();
   private readonly materials: ShaderMaterial[] = [];
 
-  constructor(map: CompiledMap) {
+  constructor(map: CompiledMap, fogDensity: number) {
     for (const t of map.triggers) {
       const color = ZONE_COLORS[t.def.kind];
       if (color === undefined) continue;
@@ -81,17 +81,13 @@ export class ZoneMeshes {
         half = new Vector3((b.maxs.x - b.mins.x) / 2, (b.maxs.y - b.mins.y) / 2, (b.maxs.z - b.mins.z) / 2);
       }
       const material = new ShaderMaterial({
-        uniforms: UniformsUtils.merge([
-          UniformsLib.fog,
-          { uColor: { value: new Color(color) }, uHalf: { value: half }, uTime: { value: 0 }, uIntensity: { value: 1.6 } },
-        ]),
+        uniforms: { uColor: { value: new Color(color) }, uHalf: { value: half }, uTime: { value: 0 }, uIntensity: { value: 1.6 }, uFogDensity: { value: fogDensity } },
         vertexShader,
         fragmentShader,
         transparent: true,
         depthWrite: false,
         blending: AdditiveBlending,
         side: DoubleSide,
-        fog: true,
       });
       this.materials.push(material);
       const mesh = new Mesh(new BoxGeometry(half.x * 2, half.y * 2, half.z * 2), material);

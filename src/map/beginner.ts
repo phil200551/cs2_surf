@@ -21,8 +21,20 @@ export const LAYOUT = {
   stage1: { r1Length: 6400, r1Drop: 480, gap: 384, gapDrop: 320, r2Length: 4000, r2Drop: 300 },
   /** Same-face transition into a new stage. */
   stageEntry: { gap: 384, gapDrop: 320 },
-  stage2: { rampLength: 3200, rampDrop: 260, altGap: 320, altGapDrop: 560, curveLeadIn: 1600, curveLeadInDrop: 120, curveRadius: 3600, curveTurn: -60, curveSegments: 12, curveDrop: 240 },
-  stage3: { dropLength: 4000, dropDrop: 1600, longGap: 1600, longGapDrop: 1650, landLength: 3600, landDrop: 300, endGap: 320, endDrop: 450, endLength: 3000, endWidth: 2048 },
+  stage2: { rampLength: 3200, rampDrop: 260, altGap: 320, altGapDrop: 560, curveLeadIn: 1600, curveLeadInDrop: 120, curveRadius: 3600, curveTurn: -60, curveSegments: 12 },
+  stage3: {
+    /** Big drop: segment descent angles (degrees) steepening then flattening, so riders stay on it. */
+    dropSlopes: [4, 10, 16, 22, 26, 22, 14, 6],
+    dropSegmentLength: 600,
+    longGap: 1500,
+    longGapDrop: 900,
+    landLength: 4400,
+    landDrop: 0,
+    endGap: 320,
+    endDrop: 450,
+    endLength: 3000,
+    endWidth: 2048,
+  },
   /** Stage pads float this far above the previous ramp's ridge end. */
   padClearance: 180,
 } as const;
@@ -53,7 +65,7 @@ function build(): MapDef {
   const padTop = L.startHeight + 216;
   const spawnCenter = v3(0, padTop, L.startZ - 256);
   prims.push(platform('Start', spawnCenter, 512, 512, 48));
-  stages.push({ index: 1, name: 'Stage 1', spawn: v3(112, padTop + 1, L.startZ - 64), yaw: 0 });
+  stages.push({ index: 1, name: 'Stage 1', spawn: v3(112, padTop + 1, L.startZ - 240), yaw: 0, pitch: -14 });
   triggers.push(zone('start', 1, v3(0, padTop + 88, spawnCenter.z), 256, 88, 256));
 
   const r2 = ramp(
@@ -122,7 +134,8 @@ function build(): MapDef {
     turn: L.stage2.curveTurn,
     radius: L.stage2.curveRadius,
     segments: L.stage2.curveSegments,
-    drop: L.stage2.curveDrop,
+    // Level: rotated sections at equal heights keep every segment face an
+    // exact planar trapezoid (a descending arc would twist them).
     material: 'stage2',
     ride: 'right',
   });
@@ -131,10 +144,32 @@ function build(): MapDef {
   const curveLast = curve.segments[curve.segments.length - 1];
 
   // ---------------------------------------------------------------- Stage 3
-  const h3 = curve.endHeading;
-  const dropStart = offset(curve.end, h3, 0, L.stageEntry.gap, -L.stageEntry.gapDrop);
-  const drop = ramp(straightRamp({ name: 'S3 big drop', start: dropStart, heading: h3, length: L.stage3.dropLength, drop: L.stage3.dropDrop, material: 'stage3', ride: 'right' }));
-  stagePad(3, curveLast, drop, h3);
+  // Continue along the direction riders actually leave the curve: its last chord.
+  const h3 = curve.exitHeading;
+  // The big drop: straight segments whose descent steepens (convex, gentler
+  // than a ballistic arc so riders keep contact) and then flattens again
+  // (concave, turning height into horizontal speed for the long gap).
+  let dropPoint = offset(curve.end, h3, 0, L.stageEntry.gap, -L.stageEntry.gapDrop);
+  const slopes = L.stage3.dropSlopes;
+  const dropSegments = slopes.map((deg, i) => {
+    const seg = ramp({
+      ...straightRamp({
+        name: `S3 big drop ${i + 1}/${slopes.length}`,
+        start: dropPoint,
+        heading: h3,
+        length: L.stage3.dropSegmentLength,
+        drop: L.stage3.dropSegmentLength * Math.tan((deg * Math.PI) / 180),
+        material: 'stage3',
+        ride: 'right',
+      }),
+      hideStartCap: i > 0,
+      hideEndCap: i < slopes.length - 1,
+    });
+    dropPoint = seg.end;
+    return seg;
+  });
+  const drop = dropSegments[dropSegments.length - 1];
+  stagePad(3, curveLast, dropSegments[0], h3);
 
   const landStart = offset(drop.end, h3, 0, L.stage3.longGap, -L.stage3.longGapDrop);
   const land = ramp(straightRamp({ name: 'S3 landing', start: landStart, heading: h3, length: L.stage3.landLength, drop: L.stage3.landDrop, material: 'stage3', ride: 'right' }));
@@ -181,7 +216,7 @@ function build(): MapDef {
   return {
     id: 'skyline',
     name: 'Skyline',
-    sun: { azimuth: 140, elevation: 42 },
+    sun: { azimuth: -50, elevation: 38 },
     primitives: prims,
     triggers,
     stages,
@@ -200,7 +235,7 @@ function build(): MapDef {
     prims.push({ kind: 'convex', name: `Stage ${stage} pad`, material: 'platform', trim: true, points: pts });
     const spawn = offset(first.start, headingDeg, 112, 64);
     spawn.y = top + 1;
-    stages.push({ index: stage, name: `Stage ${stage}`, spawn, yaw: headingDeg });
+    stages.push({ index: stage, name: `Stage ${stage}`, spawn, yaw: headingDeg, pitch: -14 });
     // Gate: from the previous ramp's end to just past the new ramp's start.
     const gapLen = Math.hypot(first.start.x - before.end.x, first.start.z - before.end.z);
     const gateCenter = offset(first.start, headingDeg, 64, -gapLen / 2 + 48);

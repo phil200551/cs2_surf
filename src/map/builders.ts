@@ -79,7 +79,7 @@ export interface CurveSpec {
  * perpendicular to the bisector of its two segments and shared exactly by
  * both, so the faces meet without gaps or ledges.
  */
-export function curveRamp(spec: CurveSpec): { segments: RampPrimitive[]; end: V3; endHeading: number } {
+export function curveRamp(spec: CurveSpec): { segments: RampPrimitive[]; end: V3; endHeading: number; exitHeading: number } {
   const n = spec.segments;
   const step = spec.turn / n;
   const chord = 2 * spec.radius * Math.sin(Math.abs(step * DEG) / 2);
@@ -106,7 +106,8 @@ export function curveRamp(spec: CurveSpec): { segments: RampPrimitive[]; end: V3
     p = q;
     h += step;
   }
-  return { segments, end: p, endHeading: h };
+  // Riders leave along the last segment's chord, half a step short of the tangent.
+  return { segments, end: p, endHeading: h, exitHeading: h - step / 2 };
 }
 
 /** Box whose top face is centred on `topCenter`. */

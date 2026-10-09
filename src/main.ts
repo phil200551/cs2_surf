@@ -1,9 +1,11 @@
 import './styles.css';
-import { CLIENT } from './config';
+import { GameAudio } from './audio/audio';
+import { CLIENT, type Settings } from './config';
 import { Game } from './game/game';
 import { Input, type InputAction } from './game/input';
-import { formatTime, loadPB, loadSettings, savePB, type PersonalBest } from './game/storage';
+import { formatTime, loadPB, loadSettings, savePB, saveSettings, type PersonalBest } from './game/storage';
 import { Hud, KEY_A, KEY_D, KEY_DUCK, KEY_JUMP, KEY_S, KEY_W } from './hud/hud';
+import { Menu } from './hud/menu';
 import { BEGINNER_MAP } from './map/beginner';
 import { compileMap } from './map/compile';
 import { TEST_MAP } from './map/testmap';
@@ -14,15 +16,17 @@ type AppState = 'title' | 'playing' | 'paused';
 
 class App {
   private readonly canvas = document.getElementById('game') as HTMLCanvasElement;
-  private readonly overlay = document.getElementById('overlay') as HTMLElement;
   private readonly game: Game;
   private readonly renderer: GameRenderer;
   private readonly input: Input;
   private readonly hud: Hud;
-  private readonly settings = loadSettings();
+  private readonly menu: Menu;
+  private readonly audio = new GameAudio();
+  private readonly settings: Settings = loadSettings();
   private readonly mapId: string;
   private pb: PersonalBest | null;
   private state: AppState = 'title';
+  private ready = false;
   private accumulator = 0;
   private lastTime = -1;
   private readonly eye = new Vec3();
@@ -39,32 +43,79 @@ class App {
     const map = compileMap(def);
     this.game = new Game(map, makeMovementConfig());
     this.pb = loadPB(this.mapId);
-    this.renderer = new GameRenderer(this.canvas, map);
+    this.renderer = new GameRenderer(this.canvas, map, { bloom: this.settings.bloom, shadows: this.settings.shadows });
     this.input = new Input(this.canvas);
-    this.input.sensitivity = this.settings.sensitivity;
     this.input.attach();
-    this.input.setView(this.game.spawnYaw(1), 0);
     this.input.onAction = (a) => this.onAction(a);
     this.input.onPointerLockChange = (locked) => {
       if (!locked && this.state === 'playing') this.pause();
     };
+    document.addEventListener('pointerlockerror', () => {
+      if (this.state === 'playing') this.pause('The browser needs a moment before the mouse can be captured again. Click Resume.');
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && this.state === 'playing') this.pause();
+    });
+    window.addEventListener('beforeunload', (e) => {
+      // Last line of defence for Ctrl+W outside fullscreen during a timed run.
+      if (this.state === 'playing' && this.game.phase === 'running') e.preventDefault();
+    });
     this.hud = new Hud(document.getElementById('hud') as HTMLElement);
-    this.hud.setKeyOverlay(this.settings.keyOverlay);
-    this.hud.setPB(this.pb?.time ?? null);
+    this.menu = new Menu(document.getElementById('overlay') as HTMLElement, {
+      play: () => this.play(),
+      restart: () => {
+        this.restartRun();
+        this.play();
+      },
+      changeSettings: (patch) => this.applySettings(patch),
+      resetPB: () => {
+        this.pb = null;
+        savePB(this.mapId, { time: 0, splits: [] });
+        this.hud.setPB(null);
+        this.showMenu();
+      },
+    });
+    this.applySettings({});
+    this.input.setView(this.game.spawnYaw(1), this.game.spawnPitch(1));
     this.hookGame();
     window.addEventListener('resize', () => this.resize());
     this.resize();
-    this.showTitle();
+    this.showMenu();
     requestAnimationFrame(this.frame);
+    void this.warmUp();
+  }
+
+  /** Compile every shader (scene, shadows, post) before the first run. */
+  private async warmUp(): Promise<void> {
+    try {
+      await this.renderer.precompile(this.game.curEye);
+    } finally {
+      this.ready = true;
+      if (this.state !== 'playing') this.showMenu();
+    }
+  }
+
+  private applySettings(patch: Partial<Settings>): void {
+    Object.assign(this.settings, patch);
+    saveSettings(this.settings);
+    this.input.sensitivity = this.settings.sensitivity;
+    this.audio.setVolume(this.settings.volume);
+    this.hud.setKeyOverlay(this.settings.keyOverlay);
+    this.renderer.setOptions({ bloom: this.settings.bloom, shadows: this.settings.shadows });
+    if (patch.renderScale !== undefined) this.resize();
+    if (patch.shadows !== undefined && this.ready) void this.renderer.precompile(this.game.curEye);
   }
 
   private hookGame(): void {
     const g = this.game;
+    this.hud.setPB(this.pb?.time ?? null);
     g.hooks = {
+      runStarted: () => this.audio.runStart(),
       checkpoint: (stage, time) => {
         const pbSplit = this.pb?.splits[stage - 1];
         const delta = Number.isFinite(time) && pbSplit !== undefined && Number.isFinite(pbSplit) ? time - pbSplit : null;
         this.hud.showMessage(`Stage ${stage}`, Number.isFinite(time) ? formatTime(time) : '', delta);
+        this.audio.checkpoint();
       },
       finished: (time) => {
         const prev = this.pb;
@@ -76,64 +127,51 @@ class App {
           this.hud.setPB(time);
         }
         this.hud.showMessage(isPb ? 'New personal best' : 'Finished', `${formatTime(time)} &middot; press R to go again`, delta, 6);
+        this.audio.finish(isPb);
       },
       reset: () => this.hud.clearMessage(),
+      landed: (speed) => this.audio.land(speed),
     };
   }
 
   private resize(): void {
-    this.renderer.setSize(window.innerWidth, window.innerHeight, window.devicePixelRatio * this.settings.renderScale);
+    this.renderer.setSize(window.innerWidth, window.innerHeight, Math.min(window.devicePixelRatio, 3) * this.settings.renderScale);
   }
 
-  private controlsHtml(): string {
-    return `<p class="controls">WASD move &middot; Mouse look &middot; Space / wheel jump &middot; Ctrl or C duck<br/>R restart run &middot; E restart stage &middot; Esc menu &middot; F3 debug</p>`;
-  }
-
-  private showTitle(): void {
-    this.overlay.innerHTML = `
-      <div class="panel">
-        <h1>${this.game.map.def.name.toUpperCase()}</h1>
-        <p>A three-stage beginner surf map. ${this.pb ? `Personal best ${formatTime(this.pb.time)}.` : 'No personal best yet.'}</p>
-        ${this.controlsHtml()}
-        <div class="buttons"><button class="primary" id="play">Play</button></div>
-      </div>`;
-    this.overlay.classList.remove('hidden');
-    (document.getElementById('play') as HTMLButtonElement).onclick = () => this.play();
+  private showMenu(notice?: string): void {
+    this.menu.show({
+      title: this.game.map.def.name.toUpperCase(),
+      subtitle: 'An original three-stage beginner surf map. CS2 surf-server movement at 64 tick.',
+      mode: this.state === 'title' ? 'title' : 'paused',
+      ready: this.ready,
+      personalBest: this.pb ? formatTime(this.pb.time) : null,
+      notice,
+      settings: this.settings,
+    });
   }
 
   private play(): void {
+    if (!this.ready) return;
     void this.input.lockPointer();
     void this.input.enterFullscreen();
-    this.overlay.classList.add('hidden');
+    this.audio.start();
+    this.menu.hide();
     this.state = 'playing';
     this.input.capturing = true;
     this.lastTime = -1;
   }
 
-  private pause(): void {
+  private pause(notice?: string): void {
     this.state = 'paused';
     this.input.capturing = false;
     this.input.unlockPointer();
-    this.overlay.innerHTML = `
-      <div class="panel">
-        <h1>Paused</h1>
-        ${this.controlsHtml()}
-        <div class="buttons">
-          <button class="primary" id="resume">Resume</button>
-          <button id="restart">Restart run</button>
-        </div>
-      </div>`;
-    this.overlay.classList.remove('hidden');
-    (document.getElementById('resume') as HTMLButtonElement).onclick = () => this.play();
-    (document.getElementById('restart') as HTMLButtonElement).onclick = () => {
-      this.restartRun();
-      this.play();
-    };
+    this.audio.suspend();
+    this.showMenu(notice);
   }
 
   private restartRun(): void {
     this.game.restartRun();
-    this.input.setView(this.game.spawnYaw(1), 0);
+    this.input.setView(this.game.spawnYaw(1), this.game.spawnPitch(1));
     this.accumulator = 0;
   }
 
@@ -152,7 +190,7 @@ class App {
       this.restartRun();
     } else if (a === 'restartStage') {
       this.game.respawn(this.game.stage);
-      this.input.setView(this.game.spawnYaw(this.game.stage), 0);
+      this.input.setView(this.game.spawnYaw(this.game.stage), this.game.spawnPitch(this.game.stage));
       this.accumulator = 0;
     }
   }
@@ -161,10 +199,10 @@ class App {
     requestAnimationFrame(this.frame);
     const game = this.game;
     const dt = game.dt;
-    const elapsedRaw = this.lastTime < 0 ? 0 : (now - this.lastTime) / 1000;
+    const elapsed = this.lastTime < 0 ? 0 : (now - this.lastTime) / 1000;
     this.lastTime = now;
     if (this.state === 'playing') {
-      this.accumulator += Math.min(elapsedRaw, CLIENT.maxFrameTime);
+      this.accumulator += Math.min(elapsed, CLIENT.maxFrameTime);
       const t0 = performance.now();
       let ticks = 0;
       while (this.accumulator >= dt) {
@@ -180,8 +218,10 @@ class App {
     this.renderer.render(this.eye, this.input.yaw, this.input.pitch, now / 1000);
 
     const p = game.player;
-    this.hud.tick(elapsedRaw);
-    this.hud.setSpeed(p.vel.horizontalLength());
+    const speed = p.vel.horizontalLength();
+    if (this.state === 'playing') this.audio.updateWind(speed);
+    this.hud.tick(elapsed);
+    this.hud.setSpeed(speed);
     this.hud.setTimer(game.runTime(alpha), game.phase);
     this.hud.setStage(game.stage, game.stageCount);
     if (this.settings.keyOverlay) {
@@ -196,8 +236,8 @@ class App {
       );
     }
     this.fpsFrames++;
-    this.fpsTime += elapsedRaw;
-    this.frameMs = this.frameMs * 0.9 + elapsedRaw * 1000 * 0.1;
+    this.fpsTime += elapsed;
+    this.frameMs = this.frameMs * 0.9 + elapsed * 1000 * 0.1;
     if (this.fpsTime >= 0.5) {
       this.fps = this.fpsFrames / this.fpsTime;
       this.fpsFrames = 0;

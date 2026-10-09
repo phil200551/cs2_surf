@@ -274,3 +274,119 @@ button:hover {
   gap: 10px;
   margin-top: 16px;
 }
+
+.panel.wide {
+  max-width: 860px;
+  width: min(860px, calc(100vw - 32px));
+}
+
+.panel-head p {
+  margin-bottom: 18px;
+}
+
+.panel-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+}
+
+@media (max-width: 760px) {
+  .panel-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+.panel h2 {
+  margin: 0 0 12px;
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+
+.controls-table {
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-top: 12px;
+}
+
+.controls-table td {
+  padding: 3px 14px 3px 0;
+  opacity: 0.85;
+}
+
+.controls-table td:first-child {
+  font-weight: 700;
+  white-space: nowrap;
+  opacity: 1;
+}
+
+.hint {
+  font-size: 12px;
+  opacity: 0.6 !important;
+}
+
+.notice {
+  color: #ffd75e;
+  opacity: 1 !important;
+}
+
+.pb-line {
+  margin-top: 14px !important;
+}
+
+.settings .row {
+  display: grid;
+  grid-template-columns: 110px 1fr 70px;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0;
+  font-size: 14px;
+}
+
+.settings .row.check {
+  grid-template-columns: 22px 1fr;
+}
+
+.settings input[type='range'] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.settings input[type='number'],
+.settings select {
+  font: inherit;
+  font-size: 13px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 4px 6px;
+  width: 100%;
+}
+
+.settings select option {
+  color: #000;
+}
+
+.settings input[type='checkbox'] {
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+}
+
+.settings output {
+  font-size: 13px;
+  text-align: right;
+}
+
+button.small {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
