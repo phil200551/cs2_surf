@@ -1,0 +1,25 @@
+{
+  "name": "cs2-surf",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "First-person browser surf game with a faithful port of Source / CS2 surf-server movement.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "postprocessing": "^6.39.5",
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@types/three": "^0.186.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.3"
+  }
+}
