@@ -22,8 +22,8 @@ export interface BrushFace {
 export class Brush {
   /** Packed [nx, ny, nz, dist] per plane. */
   readonly planes: Float64Array;
-  readonly numPlanes: number;
-  readonly numFaces: number;
+  readonly numPlanes: number = 0;
+  readonly numFaces: number = 0;
   readonly faces: BrushFace[];
   readonly mins: Vec3;
   readonly maxs: Vec3;

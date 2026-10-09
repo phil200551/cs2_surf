@@ -1,4 +1,4 @@
-import type { CompiledMap, CompiledTrigger } from '../map/compile';
+import type { CompiledMap } from '../map/compile';
 import { hullOverlapsBrush, MoveInput, PlayerController, PlayerState, sweepEnterFraction, Vec3, type MovementConfig } from '../physics';
 
 const DEG = Math.PI / 180;
@@ -33,8 +33,8 @@ export class Game {
   /** Eye position at the previous and the current tick, for interpolation. */
   readonly prevEye = new Vec3();
   readonly curEye = new Vec3();
-  readonly dt: number;
-  readonly stageCount: number;
+  readonly dt: number = 0;
+  readonly stageCount: number = 1;
   hooks: GameHooks = {};
 
   tickCount = 0;
@@ -53,7 +53,7 @@ export class Game {
   private readonly inside: boolean[];
   private readonly prevPos = new Vec3();
   private readonly startTriggerIndices: number[];
-  private readonly failTriggers: CompiledTrigger[];
+  private readonly failIndices: number[];
 
   constructor(map: CompiledMap, cfg: MovementConfig) {
     this.map = map;
@@ -64,7 +64,7 @@ export class Game {
     this.splits = new Array<number>(this.stageCount).fill(NaN);
     this.inside = map.triggers.map(() => false);
     this.startTriggerIndices = map.triggers.flatMap((t, i) => (t.def.kind === 'start' ? [i] : []));
-    this.failTriggers = map.triggers.filter((t) => t.def.kind === 'fail');
+    this.failIndices = map.triggers.flatMap((t, i) => (t.def.kind === 'fail' ? [i] : []));
     this.respawn(1);
   }
 
@@ -194,8 +194,9 @@ export class Game {
       }
     }
 
-    for (const t of this.failTriggers) {
-      if (hullOverlapsBrush(t.brush, p.pos, mins, maxs)) {
+    // Fail volumes last, from the overlap flags computed above.
+    for (let i = 0; i < this.failIndices.length; i++) {
+      if (this.inside[this.failIndices[i]]) {
         this.hooks.failed?.();
         this.respawn(this.stage);
         return;

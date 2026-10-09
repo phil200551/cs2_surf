@@ -93,6 +93,8 @@ export class ZoneMeshes {
       const mesh = new Mesh(new BoxGeometry(half.x * 2, half.y * 2, half.z * 2), material);
       mesh.position.copy(center);
       mesh.rotation.y = heading;
+      mesh.updateMatrix();
+      mesh.matrixAutoUpdate = false;
       mesh.renderOrder = 10;
       mesh.frustumCulled = true;
       this.group.add(mesh);

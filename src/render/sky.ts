@@ -89,8 +89,9 @@ const skyVertex = /* glsl */ `
   void main() {
     vDir = position;
     vec4 p = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
-    // Pin to the far plane; the dome is drawn first with depth writes off.
-    gl_Position = p.xyww;
+    // Pin just inside the far plane. The dome is drawn after all opaque
+    // geometry with a depth test, so its shader only runs where sky shows.
+    gl_Position = vec4( p.xy, p.w * 0.99999, p.w );
   }
 `;
 
@@ -173,12 +174,12 @@ export class SkyDome {
       fragmentShader: skyFragment(sunDir),
       side: BackSide,
       depthWrite: false,
-      depthTest: false,
+      depthTest: true,
       fog: false,
     });
     this.mesh = new Mesh(new SphereGeometry(1000, 48, 24), this.material);
     this.mesh.frustumCulled = false;
-    this.mesh.renderOrder = -1000;
+    this.mesh.renderOrder = 1000;
   }
 
   update(camPos: Vector3, time: number): void {

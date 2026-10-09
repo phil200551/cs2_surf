@@ -9,7 +9,6 @@ import {
   Matrix4,
   Mesh,
   NoToneMapping,
-  Object3D,
   PCFShadowMap,
   PerspectiveCamera,
   PMREMGenerator,
@@ -242,10 +241,5 @@ export class GameRenderer {
     this.updateShadowFocus(eye);
     this.zones.update(time);
     this.composer.render();
-  }
-
-  /** Objects for debugging from the console. */
-  get debugObjects(): Record<string, Object3D> {
-    return { sun: this.sun, sky: this.sky.mesh };
   }
 }

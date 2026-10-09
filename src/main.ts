@@ -2,6 +2,7 @@ import './styles.css';
 import { GameAudio } from './audio/audio';
 import { CLIENT, type Settings } from './config';
 import { Game } from './game/game';
+import { warmUpSimulation } from './game/warmup';
 import { Input, type InputAction } from './game/input';
 import { formatTime, loadPB, loadSettings, savePB, saveSettings, type PersonalBest } from './game/storage';
 import { Hud, KEY_A, KEY_D, KEY_DUCK, KEY_JUMP, KEY_S, KEY_W } from './hud/hud';
@@ -85,10 +86,11 @@ class App {
     void this.warmUp();
   }
 
-  /** Compile every shader (scene, shadows, post) before the first run. */
+  /** Compile every shader (scene, shadows, post) and JIT the simulation before the first run. */
   private async warmUp(): Promise<void> {
     try {
       await this.renderer.precompile(this.game.curEye);
+      warmUpSimulation(this.game);
     } finally {
       this.ready = true;
       if (this.state !== 'playing') this.showMenu();

@@ -1,5 +1,5 @@
 import type { MovementConfig } from './config';
-import { Vec3, cross, dot } from './vec3';
+import { Vec3, cross } from './vec3';
 import { CollisionWorld, Penetration, TraceResult } from './world';
 
 /** Mutable per-player simulation state. Positions are the feet centre. */
@@ -88,7 +88,8 @@ const MAX_RETRACES = 2;
 export class PlayerController {
   readonly world: CollisionWorld;
   readonly cfg: MovementConfig;
-  readonly dt: number;
+  // Numeric initialisers (here and below) keep V8 fields as unboxed doubles.
+  readonly dt: number = 0;
 
   readonly standMins: Vec3;
   readonly standMaxs: Vec3;
@@ -103,6 +104,8 @@ export class PlayerController {
   private readonly ride = new Vec3();
   private hasRide = false;
   private touchedLastTick = false;
+  /** Remaining move time, kept in a field so helpers never take a double argument (V8 boxes those when not inlined). */
+  private timeLeft = 0;
   private readonly lifted = new Vec3();
   private readonly pen = new Penetration();
   private readonly wishdir = new Vec3();
@@ -227,7 +230,10 @@ export class PlayerController {
     const wz = -cy * f - sy * r;
     const len = Math.sqrt(wx * wx + wz * wz);
     if (len > 1e-9) {
-      this.wishdir.set(wx / len, 0, wz / len);
+      const w = this.wishdir;
+      w.x = wx / len;
+      w.y = 0;
+      w.z = wz / len;
       this.wishspeed = this.cfg.maxSpeed * (s.ducked ? this.cfg.duckSpeedMultiplier : 1);
     } else {
       this.wishdir.zero();
@@ -249,8 +255,11 @@ export class PlayerController {
       if (s.onGround) {
         if (!this.world.findPenetration(s.pos, this.standMins, this.standMaxs, this.pen)) s.ducked = false;
       } else {
-        this.tmp.set(s.pos.x, s.pos.y - delta, s.pos.z);
-        if (!this.world.findPenetration(this.tmp, this.standMins, this.standMaxs, this.pen)) {
+        const t = this.tmp;
+        t.x = s.pos.x;
+        t.y = s.pos.y - delta;
+        t.z = s.pos.z;
+        if (!this.world.findPenetration(t, this.standMins, this.standMaxs, this.pen)) {
           s.ducked = false;
           s.pos.y -= delta;
           s.eyeOffset += delta;
@@ -276,22 +285,32 @@ export class PlayerController {
 
   private friction(s: PlayerState): void {
     const v = s.vel;
-    const speed = v.length();
+    const speed = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
     if (speed < 0.1) return;
     const control = speed < this.cfg.stopSpeed ? this.cfg.stopSpeed : speed;
     const drop = control * this.cfg.friction * this.dt;
     let newspeed = speed - drop;
     if (newspeed < 0) newspeed = 0;
-    if (newspeed !== speed) v.scale(newspeed / speed);
+    if (newspeed !== speed) {
+      const k = newspeed / speed;
+      v.x *= k;
+      v.y *= k;
+      v.z *= k;
+    }
   }
 
-  private accelerate(s: PlayerState, wishspeed: number, accel: number): void {
-    const currentspeed = dot(s.vel, this.wishdir);
+  private accelerate(s: PlayerState): void {
+    const wishspeed = this.wishspeed;
+    const w = this.wishdir;
+    const v = s.vel;
+    const currentspeed = v.x * w.x + v.y * w.y + v.z * w.z;
     const addspeed = wishspeed - currentspeed;
     if (addspeed <= 0) return;
-    let accelspeed = accel * this.dt * wishspeed;
+    let accelspeed = this.cfg.accelerate * this.dt * wishspeed;
     if (accelspeed > addspeed) accelspeed = addspeed;
-    s.vel.addScaled(this.wishdir, accelspeed);
+    v.x += w.x * accelspeed;
+    v.y += w.y * accelspeed;
+    v.z += w.z * accelspeed;
   }
 
   /**
@@ -299,31 +318,39 @@ export class PlayerController {
    * uses the full wish speed. This asymmetry is what makes air strafing and
    * surfing work. Do not "fix" it.
    */
-  private airAccelerate(s: PlayerState, wishspeed: number, accel: number): void {
+  private airAccelerate(s: PlayerState): void {
+    const wishspeed = this.wishspeed;
     const wishspd = wishspeed > this.cfg.airSpeedCap ? this.cfg.airSpeedCap : wishspeed;
-    const currentspeed = dot(s.vel, this.wishdir);
+    const w = this.wishdir;
+    const v = s.vel;
+    const currentspeed = v.x * w.x + v.y * w.y + v.z * w.z;
     const addspeed = wishspd - currentspeed;
     if (addspeed <= 0) return;
-    let accelspeed = accel * wishspeed * this.dt;
+    let accelspeed = this.cfg.airAccelerate * wishspeed * this.dt;
     if (accelspeed > addspeed) accelspeed = addspeed;
-    s.vel.addScaled(this.wishdir, accelspeed);
+    v.x += w.x * accelspeed;
+    v.y += w.y * accelspeed;
+    v.z += w.z * accelspeed;
   }
 
   private airMove(s: PlayerState): void {
-    if (this.wishspeed > 0) this.airAccelerate(s, this.wishspeed, this.cfg.airAccelerate);
+    if (this.wishspeed > 0) this.airAccelerate(s);
     this.tryPlayerMove(s);
   }
 
   private walkMove(s: PlayerState): void {
     const v = s.vel;
     v.y = 0;
-    if (this.wishspeed > 0) this.accelerate(s, this.wishspeed, this.cfg.accelerate);
+    if (this.wishspeed > 0) this.accelerate(s);
     v.y = 0;
-    if (v.length() < 1) {
+    if (v.x * v.x + v.z * v.z < 1) {
       v.zero();
       return;
     }
-    const end = this.end.set(s.pos.x + v.x * this.dt, s.pos.y, s.pos.z + v.z * this.dt);
+    const end = this.end;
+    end.x = s.pos.x + v.x * this.dt;
+    end.y = s.pos.y;
+    end.z = s.pos.z + v.z * this.dt;
     const tr = this.trace(s, s.pos, end, this.tr);
     if (tr.fraction === 1 && !tr.startSolid) {
       s.pos.copy(tr.endPos);
@@ -347,14 +374,19 @@ export class PlayerController {
     s.pos.copy(startPos);
     s.vel.copy(startVel);
 
-    this.end.set(s.pos.x, s.pos.y + cfg.stepHeight + cfg.distEpsilon, s.pos.z);
-    let tr = this.trace(s, s.pos, this.end, this.tr);
+    const end = this.end;
+    end.x = s.pos.x;
+    end.y = s.pos.y + cfg.stepHeight + cfg.distEpsilon;
+    end.z = s.pos.z;
+    let tr = this.trace(s, s.pos, end, this.tr);
     if (!tr.startSolid && !tr.allSolid) s.pos.copy(tr.endPos);
 
     this.tryPlayerMove(s);
 
-    this.end.set(s.pos.x, s.pos.y - cfg.stepHeight - cfg.distEpsilon, s.pos.z);
-    tr = this.trace(s, s.pos, this.end, this.tr);
+    end.x = s.pos.x;
+    end.y = s.pos.y - cfg.stepHeight - cfg.distEpsilon;
+    end.z = s.pos.z;
+    tr = this.trace(s, s.pos, end, this.tr);
     if (tr.normal.y < cfg.groundNormalMinY) {
       s.pos.copy(this.downPos);
       s.vel.copy(this.downVel);
@@ -377,11 +409,14 @@ export class PlayerController {
   /** Port of CGameMovement::StayOnGround: keeps a walking player glued to walkable slopes. */
   private stayOnGround(s: PlayerState): void {
     const cfg = this.cfg;
-    this.end.set(s.pos.x, s.pos.y + 2, s.pos.z);
-    let tr = this.trace(s, s.pos, this.end, this.tr);
+    const end = this.end;
+    end.x = s.pos.x;
+    end.y = s.pos.y + 2;
+    end.z = s.pos.z;
+    let tr = this.trace(s, s.pos, end, this.tr);
     this.tmp.copy(tr.endPos);
-    this.end.set(s.pos.x, s.pos.y - cfg.stepHeight, s.pos.z);
-    tr = this.trace(s, this.tmp, this.end, this.tr);
+    end.y = s.pos.y - cfg.stepHeight;
+    tr = this.trace(s, this.tmp, end, this.tr);
     if (tr.fraction > 0 && tr.fraction < 1 && !tr.startSolid && tr.normal.y >= cfg.groundNormalMinY) {
       if (Math.abs(s.pos.y - tr.endPos.y) > 0.5 / 32) s.pos.copy(tr.endPos);
     }
@@ -389,13 +424,17 @@ export class PlayerController {
 
   /** Clip `vin` against plane `n` into `out` (overbounce 1). `out` may alias `vin`. */
   private clipVelocity(vin: Vec3, n: Vec3, out: Vec3): void {
-    const backoff = dot(vin, n);
+    const backoff = vin.x * n.x + vin.y * n.y + vin.z * n.z;
     out.x = vin.x - n.x * backoff;
     out.y = vin.y - n.y * backoff;
     out.z = vin.z - n.z * backoff;
     // Iterate once to make sure we aren't still moving through the plane.
-    const adjust = dot(out, n);
-    if (adjust < 0) out.addScaled(n, -adjust);
+    const adjust = out.x * n.x + out.y * n.y + out.z * n.z;
+    if (adjust < 0) {
+      out.x -= n.x * adjust;
+      out.y -= n.y * adjust;
+      out.z -= n.z * adjust;
+    }
   }
 
   /**
@@ -427,11 +466,15 @@ export class PlayerController {
     }
 
     for (let bump = 0; bump < cfg.maxBumps; bump++) {
-      const speed = v.length();
+      const speed = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
       if (speed === 0) break;
 
-      this.end.set(s.pos.x + v.x * timeLeft, s.pos.y + v.y * timeLeft, s.pos.z + v.z * timeLeft);
-      const tr = this.trace(s, s.pos, this.end, this.tr);
+      const end = this.end;
+      end.x = s.pos.x + v.x * timeLeft;
+      end.y = s.pos.y + v.y * timeLeft;
+      end.z = s.pos.z + v.z * timeLeft;
+      const tr = this.trace(s, s.pos, end, this.tr);
+      const n = tr.normal;
 
       if (tr.allSolid) {
         if (nudges < MAX_NUDGES && this.unstick(s)) {
@@ -444,10 +487,11 @@ export class PlayerController {
       }
 
       if (tr.fraction === 0 && nudges < MAX_NUDGES) {
-        const into = dot(v, tr.normal);
+        const into = v.x * n.x + v.y * n.y + v.z * n.z;
         let samePlane = false;
         for (let i = 0; i < numplanes; i++) {
-          if (dot(planes[i], tr.normal) > SAME_PLANE_DOT) {
+          const q = planes[i];
+          if (q.x * n.x + q.y * n.y + q.z * n.z > SAME_PLANE_DOT) {
             samePlane = true;
             break;
           }
@@ -463,9 +507,11 @@ export class PlayerController {
       // misaligned neighbouring brush can leave a ledge far smaller than a
       // unit at a seam. Retrace from slightly off the ridden surface and take
       // that path if it gets farther.
-      if (tr.fraction < 1 && this.hasRide && retraces < MAX_RETRACES && dot(tr.normal, this.ride) < SAME_PLANE_DOT) {
+      const r = this.ride;
+      if (tr.fraction < 1 && this.hasRide && retraces < MAX_RETRACES && n.x * r.x + n.y * r.y + n.z * r.z < SAME_PLANE_DOT) {
         retraces++;
-        this.retraceLifted(s, timeLeft, tr);
+        this.timeLeft = timeLeft;
+        this.retraceLifted(s, tr);
       }
 
       allFraction += tr.fraction;
@@ -489,7 +535,8 @@ export class PlayerController {
       // make a zero-length crease below.
       let dup = -1;
       for (let i = 0; i < numplanes; i++) {
-        if (dot(planes[i], tr.normal) > SAME_PLANE_DOT) {
+        const q = planes[i];
+        if (q.x * n.x + q.y * n.y + q.z * n.z > SAME_PLANE_DOT) {
           dup = i;
           break;
         }
@@ -512,7 +559,8 @@ export class PlayerController {
           this.clipVelocity(original, planes[i], v);
           let j = 0;
           for (; j < numplanes; j++) {
-            if (j !== i && dot(v, planes[j]) < 0) break;
+            const q = planes[j];
+            if (j !== i && v.x * q.x + v.y * q.y + v.z * q.z < 0) break;
           }
           if (j === numplanes) break;
         }
@@ -522,17 +570,20 @@ export class PlayerController {
             v.zero();
             break;
           }
-          cross(planes[0], planes[1], this.dir);
-          if (this.dir.normalize() === 0) {
+          const dir = cross(planes[0], planes[1], this.dir);
+          const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+          if (len === 0) {
             v.zero();
             break;
           }
-          const d = dot(this.dir, v);
-          v.copy(this.dir).scale(d);
+          const d = (dir.x * v.x + dir.y * v.y + dir.z * v.z) / (len * len);
+          v.x = dir.x * d;
+          v.y = dir.y * d;
+          v.z = dir.z * d;
         }
         // Moving against the original direction: stop dead to avoid
         // oscillating in sloped corners.
-        if (dot(v, primal) <= 0) {
+        if (v.x * primal.x + v.y * primal.y + v.z * primal.z <= 0) {
           v.zero();
           break;
         }
@@ -547,14 +598,21 @@ export class PlayerController {
    * that gets farther than `tr`, moves the player to the lifted start and
    * replaces `tr` with the new result.
    */
-  private retraceLifted(s: PlayerState, timeLeft: number, tr: TraceResult): boolean {
+  private retraceLifted(s: PlayerState, tr: TraceResult): boolean {
+    const timeLeft = this.timeLeft;
     const r = this.ride;
-    const lifted = this.lifted.set(s.pos.x + r.x * RETRACE_LIFT, s.pos.y + r.y * RETRACE_LIFT, s.pos.z + r.z * RETRACE_LIFT);
+    const lifted = this.lifted;
+    lifted.x = s.pos.x + r.x * RETRACE_LIFT;
+    lifted.y = s.pos.y + r.y * RETRACE_LIFT;
+    lifted.z = s.pos.z + r.z * RETRACE_LIFT;
     const up = this.trace(s, s.pos, lifted, this.tr2);
     if (up.fraction < 1 || up.startSolid) return false;
     const v = s.vel;
-    this.end.set(lifted.x + v.x * timeLeft, lifted.y + v.y * timeLeft, lifted.z + v.z * timeLeft);
-    const re = this.trace(s, lifted, this.end, this.tr3);
+    const end = this.end;
+    end.x = lifted.x + v.x * timeLeft;
+    end.y = lifted.y + v.y * timeLeft;
+    end.z = lifted.z + v.z * timeLeft;
+    const re = this.trace(s, lifted, end, this.tr3);
     if (re.startSolid || re.allSolid || re.fraction <= tr.fraction + 1e-4) return false;
     s.pos.copy(lifted);
     tr.copy(re);
@@ -563,8 +621,11 @@ export class PlayerController {
 
   /** Pushes the player `NUDGE_DISTANCE` along `n` if that space is free. */
   private nudge(s: PlayerState, n: Vec3): boolean {
-    this.tmp.set(s.pos.x + n.x * NUDGE_DISTANCE, s.pos.y + n.y * NUDGE_DISTANCE, s.pos.z + n.z * NUDGE_DISTANCE);
-    const tr = this.trace(s, s.pos, this.tmp, this.tr2);
+    const t = this.tmp;
+    t.x = s.pos.x + n.x * NUDGE_DISTANCE;
+    t.y = s.pos.y + n.y * NUDGE_DISTANCE;
+    t.z = s.pos.z + n.z * NUDGE_DISTANCE;
+    const tr = this.trace(s, s.pos, t, this.tr2);
     if (tr.allSolid || tr.fraction === 0) return false;
     s.pos.copy(tr.endPos);
     return true;
@@ -577,8 +638,12 @@ export class PlayerController {
   unstick(s: PlayerState): boolean {
     let moved = false;
     for (let i = 0; i < 4; i++) {
-      if (!this.world.findPenetration(s.pos, this.mins(s), this.maxs(s), this.pen)) return moved;
-      s.pos.addScaled(this.pen.normal, this.pen.depth + this.cfg.distEpsilon);
+      const pen = this.pen;
+      if (!this.world.findPenetration(s.pos, this.mins(s), this.maxs(s), pen)) return moved;
+      const push = pen.depth + this.cfg.distEpsilon;
+      s.pos.x += pen.normal.x * push;
+      s.pos.y += pen.normal.y * push;
+      s.pos.z += pen.normal.z * push;
       moved = true;
     }
     return moved;
@@ -591,8 +656,11 @@ export class PlayerController {
       s.onGround = false;
       return;
     }
-    this.end.set(s.pos.x, s.pos.y - cfg.groundTraceDistance, s.pos.z);
-    const tr = this.trace(s, s.pos, this.end, this.tr);
+    const end = this.end;
+    end.x = s.pos.x;
+    end.y = s.pos.y - cfg.groundTraceDistance;
+    end.z = s.pos.z;
+    const tr = this.trace(s, s.pos, end, this.tr);
     if (tr.fraction < 1 && !tr.allSolid && tr.normal.y >= cfg.groundNormalMinY) {
       s.onGround = true;
       s.groundNormal.copy(tr.normal);

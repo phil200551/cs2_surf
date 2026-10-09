@@ -5,9 +5,12 @@
  * Coordinates are Source/Hammer units with +Y up (Three.js convention).
  */
 export class Vec3 {
-  x: number;
-  y: number;
-  z: number;
+  // Initialised as numbers (not left as declare-only fields, which class-field
+  // semantics would first define as `undefined`): V8 then stores them as
+  // in-place doubles, so writing a component never allocates.
+  x = 0;
+  y = 0;
+  z = 0;
 
   constructor(x = 0, y = 0, z = 0) {
     this.x = x;

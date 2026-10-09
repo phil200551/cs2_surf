@@ -62,7 +62,7 @@ const STACK_SIZE = 128;
  */
 export class CollisionWorld {
   readonly brushes: Brush[];
-  readonly epsilon: number;
+  readonly epsilon: number = 0;
 
   // Flattened plane data for cache-friendly access.
   private readonly planeData: Float64Array;
