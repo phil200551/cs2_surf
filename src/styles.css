@@ -1,0 +1,140 @@
+:root {
+  --hud-fg: #ffffff;
+  --hud-shadow: 0 1px 2px rgba(0, 0, 0, 0.55), 0 0 12px rgba(0, 0, 0, 0.25);
+  --panel-bg: rgba(12, 18, 28, 0.82);
+  --panel-border: rgba(255, 255, 255, 0.12);
+  --accent: #46b4ff;
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #0b1018;
+  color: #fff;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#game {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  display: block;
+  outline: none;
+}
+
+#hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  color: var(--hud-fg);
+  text-shadow: var(--hud-shadow);
+  font-variant-numeric: tabular-nums;
+}
+
+.crosshair {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
+}
+
+.hud-bottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 9vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.speed {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.speed-value {
+  font-size: 44px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  min-width: 3ch;
+  text-align: right;
+}
+
+.speed-unit {
+  font-size: 15px;
+  opacity: 0.75;
+  font-weight: 600;
+}
+
+#overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at center, rgba(8, 14, 24, 0.35), rgba(8, 14, 24, 0.7));
+  backdrop-filter: blur(3px);
+}
+
+#overlay.hidden {
+  display: none;
+}
+
+.panel {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  padding: 28px 32px;
+  min-width: 340px;
+  max-width: 560px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+}
+
+.panel h1 {
+  margin: 0 0 4px;
+  font-size: 30px;
+  letter-spacing: 0.04em;
+}
+
+.panel p {
+  margin: 4px 0 14px;
+  opacity: 0.75;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-weight: 600;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: transparent;
+  color: #031421;
+}
+
+button:hover {
+  filter: brightness(1.12);
+}
