@@ -73,6 +73,8 @@ export interface TriggerDef {
   max?: V3;
   /** ...or a convex hull of points (for rotated volumes). */
   points?: V3[];
+  /** Oriented-box description of `points`, when it is one (used for drawing). */
+  obb?: { center: V3; halfX: number; halfY: number; halfZ: number; heading: number };
 }
 
 export interface StageDef {

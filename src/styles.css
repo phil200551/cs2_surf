@@ -138,3 +138,139 @@ button.primary {
 button:hover {
   filter: brightness(1.12);
 }
+
+.hud-top {
+  position: absolute;
+  top: 3.2vh;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.timer {
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.timer.ready {
+  opacity: 0.55;
+}
+
+.timer.finished {
+  color: #ffd75e;
+}
+
+.hud-sub {
+  display: flex;
+  gap: 18px;
+  font-size: 14px;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.message {
+  position: absolute;
+  top: 24vh;
+  left: 0;
+  right: 0;
+  text-align: center;
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.message.visible {
+  opacity: 1;
+  transform: none;
+}
+
+.msg-title {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.msg-detail {
+  margin-top: 4px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.delta.better {
+  color: #5dff9b;
+}
+
+.delta.worse {
+  color: #ff6b6b;
+}
+
+.keys {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.keys.hidden,
+.debug.hidden {
+  display: none;
+}
+
+.key-row {
+  display: flex;
+  gap: 4px;
+}
+
+.key {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  text-shadow: none;
+}
+
+.key.wide {
+  min-width: 64px;
+}
+
+.key.down {
+  background: rgba(255, 255, 255, 0.85);
+  color: #0b1018;
+}
+
+.debug {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  margin: 0;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 8px;
+  font: 12px/1.45 ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  text-shadow: none;
+  white-space: pre;
+}
+
+.controls {
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}

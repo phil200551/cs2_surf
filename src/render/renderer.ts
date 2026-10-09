@@ -16,6 +16,7 @@ import type { CompiledMap } from '../map/compile';
 import type { MaterialId } from '../map/types';
 import type { Vec3 } from '../physics';
 import { buildMapGeometry } from './meshes';
+import { ZoneMeshes } from './zones';
 
 const DEG = Math.PI / 180;
 
@@ -32,6 +33,7 @@ export class GameRenderer {
   readonly renderer: WebGLRenderer;
   readonly scene = new Scene();
   readonly camera: PerspectiveCamera;
+  private readonly zones: ZoneMeshes;
 
   constructor(canvas: HTMLCanvasElement, map: CompiledMap) {
     this.renderer = new WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true, powerPreference: 'high-performance' });
@@ -56,6 +58,8 @@ export class GameRenderer {
     for (const [, g] of geo.trims) {
       this.scene.add(new Mesh(g, new MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.6 })));
     }
+    this.zones = new ZoneMeshes(map);
+    this.scene.add(this.zones.group);
   }
 
   setSize(width: number, height: number, pixelRatio: number): void {
@@ -65,7 +69,8 @@ export class GameRenderer {
     this.camera.updateProjectionMatrix();
   }
 
-  render(eye: Vec3, yaw: number, pitch: number): void {
+  render(eye: Vec3, yaw: number, pitch: number, time: number): void {
+    this.zones.update(time);
     this.camera.position.set(eye.x, eye.y, eye.z);
     this.camera.rotation.set(pitch, yaw, 0);
     this.renderer.render(this.scene, this.camera);
