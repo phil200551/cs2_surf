@@ -7,6 +7,9 @@ three-stage map floating above a sea of clouds and built for speed: you are
 launched at 2,000 u/s the moment you step off the start platform, boosters in
 every gap and steeper and steeper ramps keep adding speed, and the speed cap is
 raised from CS2's 3,500 to 10,000 u/s. A run finishes at over 7,000 u/s.
+Three difficulties: on **Easy** (the default) a surf assist keeps you on every
+ramp and a fall puts you back on the ramp you fell from; **Hard** is real CS2
+surf.
 
 Movement and collision are written from scratch: there is no physics engine and
 no character controller. Surfing is not a special state. A ramp steeper than the
@@ -79,11 +82,47 @@ takes a Keyboard Lock so Ctrl+W, Ctrl+S and Ctrl+D reach the game instead of
 the browser. Every game key also has its default suppressed.
 
 **How to surf:** walk off the front of the start platform: the pink boost pad
-launches you at 2,000 u/s onto the face of the ramp below. Hold the strafe key
-that pushes you *into* the ramp (A on a right-hand face, D on a left-hand face)
-and steer with the mouse. Holding into a 60° face cancels the slide down it (and
-even climbs slowly). Fly through the pink boost gates in the gaps for more
-speed. Air strafing works as in CS: hold A or D and turn the mouse the same way.
+launches you at 2,000 u/s onto the face of the ramp below. On Easy, that's all:
+the assist keeps you on the ramps (A and D move you up and down the face).
+Otherwise, hold the strafe key that pushes you *into* the ramp (A on a
+right-hand face, D on a left-hand face) and steer with the mouse. Holding into a
+60° face cancels the slide down it (and even climbs slowly). Fly through the
+pink boost gates in the gaps for more speed. Air strafing works as in CS: hold A
+or D and turn the mouse the same way.
+
+## Difficulty
+
+Pick it in the menu (Settings → Difficulty). Each difficulty keeps its own
+personal best, and changing it restarts the run.
+
+| | Surf assist | After a fall |
+|---|---|---|
+| **Easy** (default) | on | back on the ramp you fell from, at the speed you had on it |
+| **Medium** | off | back on the ramp you fell from, at the speed you had on it |
+| **Hard** | off | back at the start of the stage, standing still (CS2 surf rules) |
+
+**The surf assist** (`src/game/assist.ts`) never changes the physics. It only
+rewrites the movement keys before each tick, as if you had pressed them.
+
+- On a ramp face it strafes square to the ramp whatever the view, so looking
+  around never bleeds speed (in CS, a strafe with any backward component brakes
+  hard at speed). With no strafe key held it holds the middle of the face. A and
+  D move you up and down the face, but never into the quarter of the face
+  nearest the ridge or the base. W and S do nothing on a face.
+- In the air above 600 u/s it ignores the movement keys. Every gap is built so
+  the line you leave a ramp on lands on the next one, while a strafe held
+  through a long gap can drift you onto the next ridge (ridges are ground in CS
+  physics) or brake you.
+- `tests/difficulty.test.ts` plays the whole map on Easy with careless inputs:
+  pressing nothing, holding A or D the whole way, looking backwards holding W,
+  spinning the view, and mashing random keys, jump and duck included. Every one
+  finishes without a single fall, in 27.9 s. On Hard, none of them gets far.
+
+**Ramp respawns** (Easy and Medium): the game remembers the last ramp you rode
+and your speed when you first touched it. A fall puts you back near that ramp's
+start, in the middle of the face you were riding, moving down it at that speed
+and facing the way to go. Fall from the same ramp again and you go back to the
+start of the stage. The timer keeps running.
 
 ## How the movement works
 
@@ -339,16 +378,17 @@ personal best), all through a light echo and a compressor.
   colour at 1,500, 3,000, 4,500, 6,000 and 7,500 u/s and pulses when a booster
   fires; a run timer (`mm:ss.mmm`) that starts when the hull leaves the start
   zone and stops when it touches the end zone, both at sub-tick precision from a
-  swept-hull test; the stage indicator; the personal best; split messages with
-  ± deltas against the PB's splits; the run's top speed on the finish message;
-  a static crosshair; and an optional key-press overlay.
+  swept-hull test; the stage indicator; the personal best and difficulty; split
+  messages with ± deltas against the PB's splits; the run's top speed on the
+  finish message; a static crosshair; and an optional key-press overlay.
 - **F3 overlay:** fps, frame time, tick time, position, velocity (horizontal and
   3D speed), grounded and ducked flags, last hit normal (and whether it was
   touched this tick), stage and run phase.
-- **Settings** (persisted in `localStorage`): sensitivity, volume, render scale
-  (50–125%), bloom, shadows, key overlay, and a PB reset. The PB and its splits
-  are stored per map id; the speed version of Skyline has a new id
-  (`skyline-v2`), so times from the old course don't carry over.
+- **Settings** (persisted in `localStorage`): difficulty, sensitivity, volume,
+  render scale (50–125%), bloom, shadows, key overlay, and a PB reset. The PB
+  and its splits are stored per map id and difficulty; the speed version of
+  Skyline has a new id (`skyline-v2`), so times from the old course don't carry
+  over.
 
 ## Performance
 
@@ -365,8 +405,8 @@ personal best), all through a light echo and a compressor.
     traces 1,000,000 boxes, and requires that **no garbage collection** runs.
 - **JIT warm-up.** Before Play is enabled, about 20,000 scripted ticks
   (walking off every spawn pad through its launcher, jumping, ducking, surfing,
-  respawning) run on the real `Game` with its hooks muted, so V8 has optimized
-  every movement path before the run. This
+  respawning, half of them with the surf assist) run on the real `Game` with its
+  hooks muted, so V8 has optimized every movement path before the run. This
   is the CPU counterpart of precompiling shaders. Afterwards only rare cold
   paths (respawn, the seam retrace) show any boxing, averaging about 3 bytes per
   tick.
@@ -435,7 +475,7 @@ Ramp-fix constants live at the top of `src/physics/movement.ts`:
 | `yawDegreesPerCount` / `pitchDegreesPerCount` | 0.022 | m_yaw / m_pitch |
 | `maxPitch` | 89° | Pitch clamp |
 | `maxFrameTime` | 0.25 s | Accumulator clamp |
-| `defaults` | sens 1.25, volume 0.7, bloom on, shadows on, scale 100%, key overlay off | Initial settings |
+| `defaults` | Easy, sens 1.25, volume 0.7, bloom on, shadows on, scale 100%, key overlay off | Initial settings |
 
 ### Look: `src/render/palette.ts` (`PALETTE`) and renderer constants
 
@@ -484,6 +524,10 @@ and `npm test` re-validates every gap and the curve with the bot.
   gate can't be skipped.
 - **Stage respawns stay at zero velocity**, as specified. The launcher on
   every pad is what gets you moving again.
+- **Easy is the default difficulty**, asked for to make the game easier. The
+  assist only rewrites keys, so the movement code is the same at every
+  difficulty, and Hard is the faithful CS2 experience. Easy and Medium personal
+  bests are kept apart from Hard's, which uses the map's own id.
 - **Jump order is literal.** The spec says apply half of gravity, *then* set
   the vertical velocity to 301.993, which gives a jump apex of 59.4 units, not
   the continuous-time 57. It is kept as specified. Bunny hops are exactly
@@ -552,9 +596,11 @@ src/
                 movement (FullWalkMove port), triggers, config, tests
   map/          map format, compiler (brush faces, visibility, trim edges), builders,
                 Skyline, gray-box test map
-  game/         Game (simulation + run timer + triggers), input, storage, JIT warm-up
+  game/         Game (simulation + run timer + triggers + respawns), surf assist, ramp
+                lookup, input, storage, JIT warm-up
   render/       renderer (composer, lights, shadows), sky + fog, materials, meshes, zones
   audio/        Web Audio synthesis
   hud/          HUD, menu/settings
-tests/          map validation bot, gap/ballistics tests, run timer tests
+tests/          map validation bot, gap/ballistics tests, run timer and booster tests,
+                difficulty tests
 ```

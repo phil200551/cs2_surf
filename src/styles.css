@@ -209,6 +209,12 @@ button:hover {
   opacity: 0.85;
 }
 
+.hud-sub .difficulty {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.75;
+}
+
 .message {
   position: absolute;
   top: 24vh;

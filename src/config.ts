@@ -17,6 +17,7 @@ export const CLIENT = {
   maxFrameTime: 0.25,
   /** Default settings (all persisted in localStorage). */
   defaults: {
+    difficulty: 'easy',
     sensitivity: 1.25,
     volume: 0.7,
     bloom: true,
@@ -26,7 +27,15 @@ export const CLIENT = {
   },
 } as const;
 
+/**
+ * easy: the surf assist plus respawning on the ramp you fell from.
+ * medium: respawning on the ramp you fell from.
+ * hard: CS2 surf rules (a fall sends you back to the start of the stage).
+ */
+export type Difficulty = 'easy' | 'medium' | 'hard';
+
 export type Settings = {
+  difficulty: Difficulty;
   sensitivity: number;
   volume: number;
   bloom: boolean;

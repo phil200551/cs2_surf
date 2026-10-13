@@ -1,4 +1,14 @@
-import type { Settings } from '../config';
+import type { Difficulty, Settings } from '../config';
+
+const DIFFICULTIES: Array<{ id: Difficulty; label: string; about: string }> = [
+  { id: 'easy', label: 'Easy', about: 'The surf assist keeps you on every ramp: let go and it holds the middle of the face, A and D move you up and down it. A fall puts you back on the ramp you fell from.' },
+  { id: 'medium', label: 'Medium', about: 'You surf yourself, but a fall puts you back on the ramp you fell from, at the speed you had on it.' },
+  { id: 'hard', label: 'Hard', about: 'Real CS2 surf rules: a fall sends you back to the start of the stage.' },
+];
+
+export function difficultyLabel(d: Difficulty): string {
+  return DIFFICULTIES.find((x) => x.id === d)?.label ?? d;
+}
 
 export interface MenuModel {
   title: string;
@@ -61,10 +71,14 @@ export class Menu {
               <tr><td>Esc</td><td>Menu</td></tr>
               <tr><td>F3</td><td>Debug overlay</td></tr>
             </table>
-            <p class="hint">Surf: hold the strafe key toward the ramp and steer with the mouse. Never land on a ramp &mdash; the slope is the floor. Fly through the pink boosters for speed.</p>
+            <p class="hint">Walk off the front of the platform to launch. Surf: hold the strafe key toward the ramp and steer with the mouse (on Easy the assist does it for you). Never land on a ramp &mdash; the slope is the floor. Fly through the pink boosters for speed.</p>
           </div>
           <div class="col settings">
             <h2>Settings</h2>
+            <label class="row"><span>Difficulty</span>
+              <select id="s-difficulty">${DIFFICULTIES.map((d) => `<option value="${d.id}" ${d.id === s.difficulty ? 'selected' : ''}>${d.label}</option>`).join('')}</select>
+            </label>
+            <p class="hint difficulty-about">${DIFFICULTIES.find((d) => d.id === s.difficulty)?.about ?? ''} Each difficulty keeps its own personal best.</p>
             <label class="row"><span>Sensitivity</span>
               <input id="s-sens-range" type="range" min="0.1" max="8" step="0.01" value="${s.sensitivity}">
               <input id="s-sens" type="number" min="0.01" max="99" step="0.01" value="${s.sensitivity}">
@@ -104,12 +118,13 @@ export class Menu {
       $<HTMLOutputElement>('s-vol-out').textContent = `${Math.round(Number(vol.value) * 100)}%`;
       this.handlers.changeSettings({ volume: Number(vol.value) });
     };
+    $<HTMLSelectElement>('s-difficulty').onchange = (e) => this.handlers.changeSettings({ difficulty: (e.target as HTMLSelectElement).value as Difficulty });
     $<HTMLSelectElement>('s-scale').onchange = (e) => this.handlers.changeSettings({ renderScale: Number((e.target as HTMLSelectElement).value) });
     $<HTMLInputElement>('s-bloom').onchange = (e) => this.handlers.changeSettings({ bloom: (e.target as HTMLInputElement).checked });
     $<HTMLInputElement>('s-shadows').onchange = (e) => this.handlers.changeSettings({ shadows: (e.target as HTMLInputElement).checked });
     $<HTMLInputElement>('s-keys').onchange = (e) => this.handlers.changeSettings({ keyOverlay: (e.target as HTMLInputElement).checked });
     $<HTMLButtonElement>('s-reset-pb').onclick = () => {
-      if (confirm('Reset your personal best for this map?')) this.handlers.resetPB();
+      if (confirm('Reset your personal best for this map on this difficulty?')) this.handlers.resetPB();
     };
   }
 }

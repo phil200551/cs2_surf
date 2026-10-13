@@ -6,7 +6,7 @@ import { warmUpSimulation } from './game/warmup';
 import { Input, type InputAction } from './game/input';
 import { formatTime, loadPB, loadSettings, savePB, saveSettings, type PersonalBest } from './game/storage';
 import { Hud, KEY_A, KEY_D, KEY_DUCK, KEY_JUMP, KEY_S, KEY_W } from './hud/hud';
-import { Menu } from './hud/menu';
+import { difficultyLabel, Menu } from './hud/menu';
 import { BEGINNER_MAP } from './map/beginner';
 import { compileMap } from './map/compile';
 import { TEST_MAP } from './map/testmap';
@@ -43,7 +43,7 @@ class App {
     this.mapId = def.id;
     const map = compileMap(def);
     this.game = new Game(map, makeMovementConfig());
-    this.pb = loadPB(this.mapId);
+    this.pb = loadPB(this.pbId());
     this.renderer = new GameRenderer(this.canvas, map, { bloom: this.settings.bloom, shadows: this.settings.shadows });
     this.input = new Input(this.canvas);
     this.input.attach();
@@ -71,7 +71,7 @@ class App {
       changeSettings: (patch) => this.applySettings(patch),
       resetPB: () => {
         this.pb = null;
-        savePB(this.mapId, { time: 0, splits: [] });
+        savePB(this.pbId(), { time: 0, splits: [] });
         this.hud.setPB(null);
         this.showMenu();
       },
@@ -97,9 +97,27 @@ class App {
     }
   }
 
+  /** Personal bests are kept per difficulty; Hard (CS2 rules) uses the map's own id. */
+  private pbId(): string {
+    const d = this.settings.difficulty;
+    return d === 'hard' ? this.mapId : `${this.mapId}-${d}`;
+  }
+
   private applySettings(patch: Partial<Settings>): void {
+    const difficultyChanged = patch.difficulty !== undefined && patch.difficulty !== this.settings.difficulty;
     Object.assign(this.settings, patch);
     saveSettings(this.settings);
+    const d = this.settings.difficulty;
+    this.game.assistEnabled = d === 'easy';
+    this.game.rampRespawns = d !== 'hard';
+    this.hud.setDifficulty(difficultyLabel(d));
+    if (difficultyChanged) {
+      // A run belongs to one difficulty: start over, against that difficulty's best.
+      this.pb = loadPB(this.pbId());
+      this.hud.setPB(this.pb?.time ?? null);
+      this.restartRun();
+      if (this.state !== 'playing') this.showMenu();
+    }
     this.input.sensitivity = this.settings.sensitivity;
     this.audio.setVolume(this.settings.volume);
     this.hud.setKeyOverlay(this.settings.keyOverlay);
@@ -125,7 +143,7 @@ class App {
         const isPb = !prev || time < prev.time;
         if (isPb) {
           this.pb = { time, splits: g.splits.slice() };
-          savePB(this.mapId, this.pb);
+          savePB(this.pbId(), this.pb);
           this.hud.setPB(time);
         }
         const top = Math.round(g.topSpeed).toLocaleString('en-US');
@@ -133,6 +151,8 @@ class App {
         this.audio.finish(isPb);
       },
       reset: () => this.hud.clearMessage(),
+      // Put back after a fall: face the way to go.
+      failed: (yaw, pitch) => this.input.setView(yaw, pitch),
       landed: (speed) => this.audio.land(speed),
       boosted: (speed) => {
         this.audio.boost(speed);

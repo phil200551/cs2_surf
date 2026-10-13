@@ -19,9 +19,14 @@ SKYLINE SURF - how to play on Windows
    bookmarking it while you duck.
 
 4. Walk off the front of the start platform: the pink pad launches you onto
-   the first ramp at 2,000 u/s. Hold A (or D) toward the ramp to surf it, and
-   fly through the pink gates between ramps for more speed. You finish at
-   over 7,000 u/s; the speed cap is 10,000.
+   the first ramp at 2,000 u/s. On Easy (the default) the surf assist keeps
+   you on the ramps: you can just look around, or use A and D to ride higher
+   or lower on each ramp. Fly through the pink gates for more speed. You
+   finish at over 7,000 u/s; the speed cap is 10,000.
+
+   Difficulty is in the menu (Esc, then Settings). Medium: you surf yourself
+   (hold A or D toward the ramp) but a fall puts you back on that ramp.
+   Hard: real CS2 surf, a fall sends you back to the start of the stage.
 
 Controls: WASD move / air strafe, mouse look, Space or wheel down jump
 (hold to bunny hop), Ctrl or C duck, R restart run, E restart stage,

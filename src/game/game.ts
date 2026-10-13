@@ -1,6 +1,7 @@
 import type { CompiledMap } from '../map/compile';
 import type { BoostDef } from '../map/types';
 import { hullOverlapsBrush, MoveInput, PlayerController, PlayerState, sweepEnterFraction, Vec3, type MovementConfig } from '../physics';
+import { SurfAssist } from './assist';
 
 const DEG = Math.PI / 180;
 
@@ -13,7 +14,8 @@ export interface GameHooks {
   /** Reached stage `stage` with the run timer at `time` seconds (NaN if not running). */
   checkpoint?(stage: number, time: number): void;
   finished?(time: number): void;
-  failed?(): void;
+  /** Fell into a fail volume and was put back; `yaw` and `pitch` (radians) face the way to go. */
+  failed?(yaw: number, pitch: number): void;
   /** The run was reset (back in the start zone). */
   reset?(): void;
   landed?(speed: number): void;
@@ -54,6 +56,11 @@ export class Game {
   teleportCount = 0;
   /** Highest horizontal speed (u/s) reached in the current run. */
   topSpeed = 0;
+  /** The surf assist rewrites the movement keys on ramp faces and in the air (see SurfAssist). */
+  assistEnabled = false;
+  /** A fall puts you back on the ramp you fell from, at the speed you had on it. */
+  rampRespawns = false;
+  readonly assist: SurfAssist;
 
   private readonly inside: boolean[];
   private readonly prevPos = new Vec3();
@@ -65,6 +72,7 @@ export class Game {
     this.cfg = cfg;
     this.dt = 1 / cfg.tickrate;
     this.controller = new PlayerController(map.world, cfg);
+    this.assist = new SurfAssist(map.def);
     this.stageCount = Math.max(1, ...map.def.stages.map((s) => s.index));
     this.splits = new Array<number>(this.stageCount).fill(NaN);
     this.inside = map.triggers.map(() => false);
@@ -108,18 +116,46 @@ export class Game {
   respawn(stage: number): void {
     const s = this.stageDef(stage);
     this.stage = s.index;
-    this.controller.teleport(this.player, s.spawn.x, s.spawn.y, s.spawn.z);
+    this.assist.forget();
+    this.place(s.spawn.x, s.spawn.y, s.spawn.z);
+    if (this.isInStartZone()) this.resetRun();
+  }
+
+  /**
+   * Respawn on the last ramp ridden, a little way down it and in the middle
+   * of the face it was ridden on, moving along it at the speed the player
+   * first had on it.
+   */
+  private respawnOnRamp(): void {
+    const a = this.assist;
+    const r = a.ramps;
+    const i = a.lastRamp;
+    const hw = r.halfWidth[i];
+    const along = Math.min(320, r.length[i] * 0.3);
+    const lane = 0.45 * hw * a.lastSide;
+    const x = r.startX[i] + r.dirX[i] * along - r.dirZ[i] * lane;
+    const z = r.startZ[i] + r.dirZ[i] * along + r.dirX[i] * lane;
+    // Just clear of the face: the hull's inner bottom edge reaches up to 23
+    // units nearer the ridge than its centre (diagonal ramps), and its back
+    // edge sits where a descending ridge is a little higher.
+    const y = r.ridgeY(i, along - 24) - (r.height[i] / hw) * (Math.abs(lane) - 24) + 4;
+    this.place(x, y, z);
+    const s = a.lastSpeed;
+    this.player.vel.set(r.dirX[i] * s, -r.slope[i] * s, r.dirZ[i] * s);
+  }
+
+  /** Teleports the player at rest and re-evaluates zone membership without firing events. */
+  private place(x: number, y: number, z: number): void {
+    this.controller.teleport(this.player, x, y, z);
     this.curEye.set(this.player.pos.x, this.player.pos.y + this.player.eyeOffset, this.player.pos.z);
     this.prevEye.copy(this.curEye);
     this.prevPos.copy(this.player.pos);
     this.teleportCount++;
-    // Re-evaluate zone membership at the new position without firing enter/leave events.
     const mins = this.controller.mins(this.player);
     const maxs = this.controller.maxs(this.player);
     this.map.triggers.forEach((t, i) => {
       this.inside[i] = hullOverlapsBrush(t.brush, this.player.pos, mins, maxs);
     });
-    if (this.isInStartZone()) this.resetRun();
   }
 
   private isInStartZone(): boolean {
@@ -142,7 +178,9 @@ export class Game {
     const p = this.player;
     this.prevEye.copy(this.curEye);
     this.prevPos.copy(p.pos);
+    if (this.assistEnabled) this.assist.steer(p, this.input);
     this.controller.tick(p, this.input);
+    this.assist.observe(p, this.cfg.groundNormalMinY);
     this.tickCount++;
     this.curEye.set(p.pos.x, p.pos.y + p.eyeOffset, p.pos.z);
     if (p.landed) this.hooks.landed?.(p.landingSpeed);
@@ -224,8 +262,16 @@ export class Game {
     // Fail volumes last, from the overlap flags computed above.
     for (let i = 0; i < this.failIndices.length; i++) {
       if (this.inside[this.failIndices[i]]) {
-        this.hooks.failed?.();
-        this.respawn(this.stage);
+        const a = this.assist;
+        // Back on the ramp you fell from, unless you just fell from it again.
+        if (this.rampRespawns && a.lastRamp >= 0 && a.falls === 0) {
+          a.falls++;
+          this.respawnOnRamp();
+          this.hooks.failed?.(a.ramps.heading[a.lastRamp], -8 * DEG);
+        } else {
+          this.respawn(this.stage);
+          this.hooks.failed?.(this.spawnYaw(this.stage), this.spawnPitch(this.stage));
+        }
         return;
       }
     }

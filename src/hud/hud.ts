@@ -31,6 +31,7 @@ export class Hud {
   private readonly timerEl: HTMLElement;
   private readonly stageEl: HTMLElement;
   private readonly pbEl: HTMLElement;
+  private readonly difficultyEl: HTMLElement;
   private readonly messageEl: HTMLElement;
   private readonly keysEl: HTMLElement;
   private readonly keyEls: HTMLElement[];
@@ -52,7 +53,7 @@ export class Hud {
       <div class="crosshair"></div>
       <div class="hud-top">
         <div class="timer ready">00:00.000</div>
-        <div class="hud-sub"><span class="stage">Stage 1/3</span><span class="pb">PB --:--.---</span></div>
+        <div class="hud-sub"><span class="stage">Stage 1/3</span><span class="pb">PB --:--.---</span><span class="difficulty"></span></div>
       </div>
       <div class="message"></div>
       <div class="hud-bottom">
@@ -70,6 +71,7 @@ export class Hud {
     this.timerEl = q('.timer');
     this.stageEl = q('.stage');
     this.pbEl = q('.pb');
+    this.difficultyEl = q('.difficulty');
     this.messageEl = q('.message');
     this.keysEl = q('.keys');
     this.debugEl = q('.debug');
@@ -125,6 +127,11 @@ export class Hud {
     if (text === this.lastPb) return;
     this.lastPb = text;
     this.pbEl.textContent = text;
+  }
+
+  /** Difficulty label next to the PB. */
+  setDifficulty(label: string): void {
+    this.difficultyEl.textContent = label;
   }
 
   /** Shows a centred message; `delta` (vs PB) is coloured green/red. */

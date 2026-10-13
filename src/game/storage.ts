@@ -27,6 +27,7 @@ export function loadSettings(): Settings {
   const s: Settings = { ...CLIENT.defaults };
   if (stored && typeof stored === 'object') {
     const o = stored as Partial<Record<keyof Settings, unknown>>;
+    if (o.difficulty === 'easy' || o.difficulty === 'medium' || o.difficulty === 'hard') s.difficulty = o.difficulty;
     if (typeof o.sensitivity === 'number' && o.sensitivity > 0 && o.sensitivity < 100) s.sensitivity = o.sensitivity;
     if (typeof o.volume === 'number' && o.volume >= 0 && o.volume <= 1) s.volume = o.volume;
     if (typeof o.bloom === 'boolean') s.bloom = o.bloom;
