@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "serve": "node serve.mjs --open"
   },
   "dependencies": {
     "postprocessing": "^6.39.5",

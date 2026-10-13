@@ -31,8 +31,26 @@ npm run dev        # open the printed URL, click Play
 | `npm run preview` | Serve the production build |
 | `npm run typecheck` | `tsc --noEmit` (strict) |
 | `npm test` | Vitest: physics proofs, map validation, timer, allocation checks |
+| `npm run serve` | Serve `dist/` on localhost with `serve.mjs` and open the browser |
 
 Add `?map=test` to the URL for the small gray-box test map.
+
+### Windows (cmd)
+
+With a prebuilt `dist/` (as in the release zip), the game needs only
+[Node.js](https://nodejs.org). There is no install step:
+
+```bat
+cd path\to\skyline-surf
+play.bat
+```
+
+`play.bat` serves `dist/` with `serve.mjs` (a zero-dependency static server
+bound to localhost) and opens `http://localhost:8080`. If that port is taken it
+picks the next free one and prints it. Keep the cmd window open while you play;
+Ctrl+C stops it. If `dist/` is missing, `play.bat` runs `npm install` and
+`npm run build` once first. `dev.bat` starts the Vite dev server instead
+(it runs `npm install` on first use).
 
 The stack is Vite, TypeScript (strict), Three.js r186, pmndrs `postprocessing`
 6, Vitest, and plain DOM/CSS for the HUD. It needs a WebGL2 browser; Chromium

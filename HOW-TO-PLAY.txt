@@ -1,0 +1,34 @@
+SKYLINE SURF - how to play on Windows
+=====================================
+
+1. Install Node.js (the LTS version) from https://nodejs.org if you don't
+   have it. To check, open cmd and type:   node -v
+
+2. Unzip this folder. In cmd, go into it and start the game:
+
+       cd path\to\skyline-surf
+       play.bat
+
+   Your browser opens http://localhost:8080 and the game loads.
+   Keep the cmd window open while you play. Ctrl+C in it stops the server.
+   The game is already built (the dist folder), so there is no install step.
+
+3. Click Play. The game goes fullscreen and captures the mouse.
+   Esc opens the menu (settings, restart). Use Chrome or Edge for raw mouse
+   input and Keyboard Lock, which stops Ctrl+W / Ctrl+D closing the tab or
+   bookmarking it while you duck.
+
+Controls: WASD move / air strafe, mouse look, Space or wheel down jump
+(hold to bunny hop), Ctrl or C duck, R restart run, E restart stage,
+Esc menu, F3 debug overlay.
+
+Developer mode (live reload when you edit src\):
+
+       dev.bat        first run does "npm install" (needs internet)
+
+After "npm install" you can also run:
+       npm test           physics, map and timer tests
+       npm run build      rebuild the dist folder
+       npm run serve      same as play.bat
+
+If port 8080 is busy, the server picks the next free port and prints it.
