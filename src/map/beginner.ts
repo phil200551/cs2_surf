@@ -258,7 +258,9 @@ function build(): MapDef {
   });
 
   return {
-    id: 'skyline',
+    // Personal bests are stored per id: a new layout gets a new one, so times
+    // and splits from the old course are never compared with this one.
+    id: 'skyline-v2',
     name: 'Skyline',
     sun: { azimuth: -50, elevation: 38 },
     primitives: prims,

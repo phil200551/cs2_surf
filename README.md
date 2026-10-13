@@ -347,7 +347,8 @@ personal best), all through a light echo and a compressor.
   touched this tick), stage and run phase.
 - **Settings** (persisted in `localStorage`): sensitivity, volume, render scale
   (50–125%), bloom, shadows, key overlay, and a PB reset. The PB and its splits
-  are stored per map.
+  are stored per map id; the speed version of Skyline has a new id
+  (`skyline-v2`), so times from the old course don't carry over.
 
 ## Performance
 
