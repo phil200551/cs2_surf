@@ -253,3 +253,21 @@ describe('bunny hopping', () => {
     expect(s.vel.horizontalLength()).toBeCloseTo(600 * (1 - 5.2 / 64), 6);
   });
 });
+
+describe('velocity cap', () => {
+  it('clamps each axis to sv_maxvelocity (10,000), far above CS2\'s 3500', () => {
+    const { pc, s, input, cfg } = makeSim([], { gravity: 0 });
+    expect(cfg.maxVelocity).toBe(10000);
+    pc.teleport(s, 0, 0, 0);
+    s.vel.set(9000, 0, -9000);
+    pc.tick(s, input);
+    // Under the cap on both axes: untouched, 12,728 u/s horizontally.
+    expect(s.vel.x).toBe(9000);
+    expect(s.vel.z).toBe(-9000);
+    s.vel.set(14000, -12000, -10500);
+    pc.tick(s, input);
+    expect(s.vel.x).toBe(10000);
+    expect(s.vel.y).toBe(-10000);
+    expect(s.vel.z).toBe(-10000);
+  });
+});

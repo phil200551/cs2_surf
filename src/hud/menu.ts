@@ -61,7 +61,7 @@ export class Menu {
               <tr><td>Esc</td><td>Menu</td></tr>
               <tr><td>F3</td><td>Debug overlay</td></tr>
             </table>
-            <p class="hint">Surf: hold the strafe key toward the ramp and steer with the mouse. Never land on a ramp &mdash; the slope is the floor.</p>
+            <p class="hint">Surf: hold the strafe key toward the ramp and steer with the mouse. Never land on a ramp &mdash; the slope is the floor. Fly through the pink boosters for speed.</p>
           </div>
           <div class="col settings">
             <h2>Settings</h2>

@@ -128,11 +128,16 @@ class App {
           savePB(this.mapId, this.pb);
           this.hud.setPB(time);
         }
-        this.hud.showMessage(isPb ? 'New personal best' : 'Finished', `${formatTime(time)} &middot; press R to go again`, delta, 6);
+        const top = Math.round(g.topSpeed).toLocaleString('en-US');
+        this.hud.showMessage(isPb ? 'New personal best' : 'Finished', `${formatTime(time)} &middot; top speed ${top} u/s &middot; press R to go again`, delta, 6);
         this.audio.finish(isPb);
       },
       reset: () => this.hud.clearMessage(),
       landed: (speed) => this.audio.land(speed),
+      boosted: (speed) => {
+        this.audio.boost(speed);
+        this.hud.flashBoost();
+      },
     };
   }
 
@@ -143,7 +148,7 @@ class App {
   private showMenu(notice?: string): void {
     this.menu.show({
       title: this.game.map.def.name.toUpperCase(),
-      subtitle: 'An original three-stage beginner surf map. CS2 surf-server movement at 64 tick.',
+      subtitle: 'An original three-stage surf map built for speed, with boosters all the way down. CS2 surf-server movement at 64 tick, with the speed cap raised to 10,000 u/s.',
       mode: this.state === 'title' ? 'title' : 'paused',
       ready: this.ready,
       personalBest: this.pb ? formatTime(this.pb.time) : null,
@@ -217,7 +222,7 @@ class App {
     }
     const alpha = this.state === 'playing' ? this.accumulator / dt : 1;
     game.eye(alpha, this.eye);
-    this.renderer.render(this.eye, this.input.yaw, this.input.pitch, now / 1000);
+    this.renderer.render(this.eye, this.input.yaw, this.input.pitch, now / 1000, game.player.vel);
 
     const p = game.player;
     const speed = p.vel.horizontalLength();

@@ -76,6 +76,66 @@ describe('seam stress', () => {
     expect(worst).toBeLessThan(0.01);
   });
 
+  it('high speed: 3000-9500 u/s down split ramps descending up to 20 degrees, no tick loses 1%', () => {
+    const random = rng(4242);
+    let worst = 0;
+    let crossings = 0;
+    while (crossings < 1500) {
+      const yaw = random() * Math.PI * 2;
+      const slope = Math.tan(random() * 20 * DEG);
+      const speed = 3000 + random() * 6500;
+      const hold = random() < 0.6;
+      const dirH = new Vec3(-Math.sin(yaw), 0, -Math.cos(yaw));
+      const right = new Vec3(Math.cos(yaw), 0, -Math.sin(yaw));
+      const origin = new Vec3((random() - 0.5) * 40000, 20000 + random() * 8000, (random() - 0.5) * 40000);
+      const along = (t: number) => new Vec3(origin.x + dirH.x * t, origin.y - slope * t, origin.z + dirH.z * t);
+      const jitter = random() < 0.5 ? 0.004 : 0;
+      const seams: number[] = [];
+      const brushes: Brush[] = [];
+      // Segments from 20 to 1200 units: several seams a tick at the short end.
+      for (let t0 = 0; t0 < speed * 1.2 + 1200; ) {
+        const t1 = t0 + 20 + random() * 1180;
+        const j = () => (random() * 2 - 1) * jitter;
+        const jx = j(), jy = j(), jz = j();
+        brushes.push(brushFromPoints(aFramePoints(along(t0), along(t1), 448, 256).map((p) => new Vec3(p.x + jx, p.y + jy, p.z + jz))));
+        seams.push(t1);
+        t0 = t1;
+      }
+      const sim = makeSim(brushes);
+      const { pc, s, input } = sim;
+      const face = faceToward(brushes[0], { x: right.x, y: 0.6, z: right.z });
+      const lateral = 56 + random() * 160;
+      const startT = 300;
+      const px = origin.x + dirH.x * startT + right.x * lateral;
+      const pz = origin.z + dirH.z * startT + right.z * lateral;
+      pc.teleport(s, px, yOnPlane(face.normal, face.dist, px, pz, sim.cfg.distEpsilon, pc.standMins, pc.standMaxs), pz);
+      s.touched = true;
+      s.lastHitNormal.copy(face.normal);
+      const axis = new Vec3(dirH.x, -slope, dirH.z);
+      axis.normalize();
+      s.vel.copy(axis).scale(speed);
+      input.clear();
+      input.yaw = yaw;
+      input.side = hold ? -1 : 0;
+      let idx = seams.findIndex((x) => x > startT);
+      for (let tick = 0; tick < 64; tick++) {
+        const before = s.vel.length();
+        pc.tick(s, input);
+        worst = Math.max(worst, (before - s.vel.length()) / before);
+        const proj = (s.pos.x - origin.x) * dirH.x + (s.pos.z - origin.z) * dirH.z;
+        const gap = hullPlaneGap(face.normal, face.dist, s.pos, pc.standMins, pc.standMaxs);
+        const onFace = gap < 2 && gap > -0.02;
+        while (idx >= 0 && idx < seams.length && proj > seams[idx]) {
+          if (onFace) crossings++;
+          idx++;
+        }
+        if (!onFace || idx >= seams.length - 2 || s.onGround) break;
+      }
+    }
+    expect(crossings).toBeGreaterThanOrEqual(1500);
+    expect(worst).toBeLessThan(0.01);
+  });
+
   it('curved ramps: joint losses never exceed the geometric cost of the turn', () => {
     const random = rng(42);
     let joints = 0;

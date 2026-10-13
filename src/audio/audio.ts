@@ -3,8 +3,9 @@
  *
  * - Wind: looping pink noise through a band-pass filter; volume and pitch
  *   follow horizontal speed. A second high-passed layer whistles at speed.
- * - Landing thud, checkpoint chime, start blip and finish arpeggio are short
- *   one-shot envelopes on oscillators and noise.
+ *   Both keep rising, with diminishing steps, all the way to 10,000 u/s.
+ * - Landing thud, boost whoosh, checkpoint chime, start blip and finish
+ *   arpeggio are short one-shot envelopes on oscillators and noise.
  */
 export class GameAudio {
   private ctx: AudioContext | null = null;
@@ -99,12 +100,49 @@ export class GameAudio {
     if (t - this.lastWindUpdate < 0.033) return;
     this.lastWindUpdate = t;
     const s = Math.max(0, speed);
-    const body = smoothstep(120, 2600, s);
-    this.windGain.gain.setTargetAtTime(0.06 + 0.55 * body * body, t, 0.12);
-    this.windFilter.frequency.setTargetAtTime(220 + Math.min(s, 3500) * 0.55, t, 0.12);
-    const whistle = smoothstep(900, 3000, s);
-    this.whistleGain.gain.setTargetAtTime(0.12 * whistle, t, 0.15);
-    this.whistleFilter.frequency.setTargetAtTime(900 + Math.min(s, 3500) * 0.7, t, 0.15);
+    const body = smoothstep(120, 3200, s);
+    const roar = smoothstep(3000, 9000, s);
+    this.windGain.gain.setTargetAtTime(0.06 + 0.5 * body * body + 0.12 * roar, t, 0.12);
+    // Saturating pitch curves: about the old pitch at low speed, still rising at 10,000.
+    this.windFilter.frequency.setTargetAtTime(220 + 2600 * (s / (s + 2600)), t, 0.12);
+    const whistle = smoothstep(900, 3600, s);
+    this.whistleGain.gain.setTargetAtTime(0.11 * whistle + 0.05 * roar, t, 0.15);
+    this.whistleFilter.frequency.setTargetAtTime(900 + 3200 * (s / (s + 4000)), t, 0.15);
+  }
+
+  /** Rising whoosh through a booster; a little brighter the faster you leave it. */
+  boost(speed: number): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.master || !this.noise) return;
+    const t = ctx.currentTime;
+    const k = smoothstep(1500, 9000, speed);
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.Q.value = 1.6;
+    bp.frequency.setValueAtTime(380, t);
+    bp.frequency.exponentialRampToValueAtTime(2600 + 2400 * k, t + 0.32);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.42, t + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+    src.connect(bp).connect(g).connect(this.master);
+    src.start(t, Math.random() * 2, 0.55);
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(180 + 120 * k, t);
+    osc.frequency.exponentialRampToValueAtTime(720 + 480 * k, t + 0.28);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 1800;
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(0.0001, t);
+    og.gain.exponentialRampToValueAtTime(0.07, t + 0.03);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.34);
+    osc.connect(lp).connect(og).connect(this.master);
+    osc.start(t);
+    osc.stop(t + 0.36);
   }
 
   /** Thud scaled by impact speed (u/s). */

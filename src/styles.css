@@ -73,8 +73,45 @@ body {
   font-size: 44px;
   font-weight: 700;
   letter-spacing: 0.02em;
-  min-width: 3ch;
+  min-width: 4ch;
   text-align: right;
+  font-variant-numeric: tabular-nums;
+  transition: color 0.25s ease, text-shadow 0.25s ease;
+}
+
+/* Speed tiers: 1500, 3000, 4500, 6000 and 7500 u/s. */
+.speed[data-tier='1'] .speed-value {
+  color: #a8ecff;
+}
+.speed[data-tier='2'] .speed-value {
+  color: #7dffc4;
+}
+.speed[data-tier='3'] .speed-value {
+  color: #ffe36b;
+  text-shadow: 0 0 14px rgba(255, 210, 80, 0.35);
+}
+.speed[data-tier='4'] .speed-value {
+  color: #ffa04a;
+  text-shadow: 0 0 16px rgba(255, 140, 60, 0.45);
+}
+.speed[data-tier='5'] .speed-value {
+  color: #ff5cb4;
+  text-shadow: 0 0 20px rgba(255, 70, 170, 0.6);
+}
+
+.speed.boosted {
+  animation: boost-pulse 0.45s ease-out;
+}
+
+@keyframes boost-pulse {
+  0% {
+    transform: scale(1.18);
+    filter: drop-shadow(0 0 10px rgba(255, 63, 164, 0.9));
+  }
+  100% {
+    transform: none;
+    filter: none;
+  }
 }
 
 .speed-unit {

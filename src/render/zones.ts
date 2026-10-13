@@ -1,4 +1,4 @@
-import { AdditiveBlending, BoxGeometry, Color, DoubleSide, Group, Mesh, ShaderMaterial, Vector3 } from 'three';
+import { AdditiveBlending, BoxGeometry, Color, DoubleSide, FrontSide, Group, Mesh, NormalBlending, ShaderMaterial, Vector3 } from 'three';
 import type { CompiledMap } from '../map/compile';
 import type { TriggerKind } from '../map/types';
 
@@ -8,6 +8,7 @@ export const ZONE_COLORS: Partial<Record<TriggerKind, number>> = {
   start: 0x3dff8e,
   checkpoint: 0x3ec8ff,
   end: 0xffc53a,
+  boost: 0xff3fa4,
 };
 
 const vertexShader = /* glsl */ `
@@ -32,6 +33,8 @@ const fragmentShader = /* glsl */ `
   uniform vec3 uHalf;
   uniform float uTime;
   uniform float uIntensity;
+  uniform float uBoost;
+  uniform float uNearFade;
   varying vec3 vLocal;
   varying vec3 vWorld;
   void main() {
@@ -43,22 +46,40 @@ const fragmentShader = /* glsl */ `
     float hi = max(d.x, max(d.y, d.z));
     float edgeDist = d.x + d.y + d.z - lo - hi;
     float edge = exp(-edgeDist / 10.0) + 0.35 * exp(-edgeDist / 60.0);
-    // Brighter toward the bottom, with slow rising bands.
-    float h = clamp((vLocal.y + uHalf.y) / (2.0 * uHalf.y), 0.0, 1.0);
-    float bands = 0.5 + 0.5 * sin((h * 6.0 - uTime * 0.6) * 6.2831);
-    float fill = (0.05 + 0.10 * (1.0 - h) + 0.03 * bands) * (1.0 - h * 0.6);
+    float fill;
+    if (uBoost > 0.5) {
+      // Boosters push toward local -Z. On the faces you fly through, rings
+      // sweep in toward the middle; on the others, chevrons stream forward.
+      float s;
+      if (d.z <= lo + 0.5) {
+        float k = min(d.x / uHalf.x, d.y / uHalf.y);
+        s = fract(k * 5.0 - uTime * 1.6);
+      } else {
+        float across = d.x <= lo + 0.5 ? vLocal.y : vLocal.x;
+        // Decals (boost pads on a floor) get tighter, bolder chevrons.
+        s = fract((vLocal.z - abs(across) * 0.7) / mix(80.0, 220.0, uNearFade) + uTime * 1.6);
+      }
+      float stripe = smoothstep(0.0, 0.12, s) * (1.0 - smoothstep(0.32, 0.5, s));
+      fill = mix(0.08 + 0.62 * stripe, 0.035 + 0.16 * stripe, uNearFade);
+    } else {
+      // Brighter toward the bottom, with slow rising bands.
+      float h = clamp((vLocal.y + uHalf.y) / (2.0 * uHalf.y), 0.0, 1.0);
+      float bands = 0.5 + 0.5 * sin((h * 6.0 - uTime * 0.6) * 6.2831);
+      fill = (0.05 + 0.10 * (1.0 - h) + 0.03 * bands) * (1.0 - h * 0.6);
+    }
     // Walls right next to the camera fade out, so standing inside a zone
     // tints the view instead of whiting it out.
     float near = smoothstep(60.0, 700.0, distance(cameraPosition, vWorld));
-    float a = clamp(edge * 0.9 + fill, 0.0, 1.0) * (0.25 + 0.75 * near);
+    float a = clamp(edge * 0.9 + fill, 0.0, 1.0) * mix(1.0, 0.25 + 0.75 * near, uNearFade);
     // Additive glow fades to nothing with distance (fog for additive light).
     float dist = distance(cameraPosition, vWorld);
     float fog = exp(-uFogDensity * uFogDensity * dist * dist);
-    gl_FragColor = vec4(uColor * a * uIntensity * fog, 1.0);
+    // Volumes add light; decals are painted on with ordinary alpha blending.
+    gl_FragColor = uNearFade > 0.5 ? vec4(uColor * a * uIntensity * fog, 1.0) : vec4(uColor * uIntensity, a * fog);
   }
 `;
 
-/** Translucent glowing volumes for the start, checkpoint and end zones. */
+/** Translucent glowing volumes for the start, checkpoint and end zones and the boosters. */
 export class ZoneMeshes {
   readonly group = new Group();
   private readonly materials: ShaderMaterial[] = [];
@@ -66,12 +87,14 @@ export class ZoneMeshes {
   constructor(map: CompiledMap, fogDensity: number) {
     for (const t of map.triggers) {
       const color = ZONE_COLORS[t.def.kind];
-      if (color === undefined) continue;
+      if (color === undefined || t.def.hidden) continue;
       let center: Vector3;
       let half: Vector3;
       let heading = 0;
-      if (t.def.obb) {
-        const o = t.def.obb;
+      const box = t.def.display ?? t.def.obb;
+      const decal = t.def.display?.decal === true;
+      if (box) {
+        const o = box;
         center = new Vector3(o.center.x, o.center.y, o.center.z);
         half = new Vector3(o.halfX, o.halfY, o.halfZ);
         heading = o.heading * DEG;
@@ -81,13 +104,21 @@ export class ZoneMeshes {
         half = new Vector3((b.maxs.x - b.mins.x) / 2, (b.maxs.y - b.mins.y) / 2, (b.maxs.z - b.mins.z) / 2);
       }
       const material = new ShaderMaterial({
-        uniforms: { uColor: { value: new Color(color) }, uHalf: { value: half }, uTime: { value: 0 }, uIntensity: { value: 1.6 }, uFogDensity: { value: fogDensity } },
+        uniforms: {
+          uColor: { value: new Color(color) },
+          uHalf: { value: half },
+          uTime: { value: 0 },
+          uIntensity: { value: 1.6 },
+          uFogDensity: { value: fogDensity },
+          uBoost: { value: t.def.kind === 'boost' ? 1 : 0 },
+          uNearFade: { value: decal ? 0 : 1 },
+        },
         vertexShader,
         fragmentShader,
         transparent: true,
         depthWrite: false,
-        blending: AdditiveBlending,
-        side: DoubleSide,
+        blending: decal ? NormalBlending : AdditiveBlending,
+        side: decal ? FrontSide : DoubleSide,
       });
       this.materials.push(material);
       const mesh = new Mesh(new BoxGeometry(half.x * 2, half.y * 2, half.z * 2), material);

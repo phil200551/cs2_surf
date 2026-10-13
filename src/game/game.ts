@@ -1,4 +1,5 @@
 import type { CompiledMap } from '../map/compile';
+import type { BoostDef } from '../map/types';
 import { hullOverlapsBrush, MoveInput, PlayerController, PlayerState, sweepEnterFraction, Vec3, type MovementConfig } from '../physics';
 
 const DEG = Math.PI / 180;
@@ -16,6 +17,8 @@ export interface GameHooks {
   /** The run was reset (back in the start zone). */
   reset?(): void;
   landed?(speed: number): void;
+  /** Went through a booster; `speed` is the horizontal speed after it. */
+  boosted?(speed: number): void;
 }
 
 /**
@@ -49,6 +52,8 @@ export class Game {
   readonly splits: number[];
   /** Incremented on every teleport so views can drop interpolation. */
   teleportCount = 0;
+  /** Highest horizontal speed (u/s) reached in the current run. */
+  topSpeed = 0;
 
   private readonly inside: boolean[];
   private readonly prevPos = new Vec3();
@@ -127,6 +132,7 @@ export class Game {
     this.stage = 1;
     this.runStart = 0;
     this.finishTime = 0;
+    this.topSpeed = 0;
     this.splits.fill(NaN);
     if (!wasReset) this.hooks.reset?.();
   }
@@ -141,6 +147,10 @@ export class Game {
     this.curEye.set(p.pos.x, p.pos.y + p.eyeOffset, p.pos.z);
     if (p.landed) this.hooks.landed?.(p.landingSpeed);
     this.updateTriggers();
+    if (this.phase === 'running') {
+      const speed = p.vel.horizontalLength();
+      if (speed > this.topSpeed) this.topSpeed = speed;
+    }
   }
 
   private updateTriggers(): void {
@@ -149,11 +159,21 @@ export class Game {
     const maxs = this.controller.maxs(p);
     const triggers = this.map.triggers;
     const tickStart = (this.tickCount - 1) * this.dt;
+    // Bounds of the hull swept over this tick: triggers outside them can be
+    // neither overlapped nor entered, which rejects almost all of them cheaply.
+    const a = this.prevPos;
+    const b = p.pos;
+    const lx = (a.x < b.x ? a.x : b.x) + mins.x, hx = (a.x > b.x ? a.x : b.x) + maxs.x;
+    const ly = (a.y < b.y ? a.y : b.y) + mins.y, hy = (a.y > b.y ? a.y : b.y) + maxs.y;
+    const lz = (a.z < b.z ? a.z : b.z) + mins.z, hz = (a.z > b.z ? a.z : b.z) + maxs.z;
 
     for (let i = 0; i < triggers.length; i++) {
       const t = triggers[i];
+      const tb = t.brush;
+      const near = tb.maxs.x >= lx && tb.mins.x <= hx && tb.maxs.y >= ly && tb.mins.y <= hy && tb.maxs.z >= lz && tb.mins.z <= hz;
       const was = this.inside[i];
-      const now = hullOverlapsBrush(t.brush, p.pos, mins, maxs);
+      if (!near && !was) continue;
+      const now = near && hullOverlapsBrush(tb, p.pos, mins, maxs);
       this.inside[i] = now;
       switch (t.def.kind) {
         case 'start':
@@ -189,6 +209,13 @@ export class Game {
           this.hooks.finished?.(this.finishTime);
           break;
         }
+        case 'boost': {
+          if (was) break;
+          // Entered this tick, possibly flying straight through a thin gate.
+          if (!now && sweepEnterFraction(t.brush, this.prevPos, p.pos, mins, maxs) < 0) break;
+          this.boost(t.def.boost);
+          break;
+        }
         case 'fail':
           break;
       }
@@ -202,6 +229,30 @@ export class Game {
         return;
       }
     }
+  }
+
+  /** Applies a booster: along-heading speed becomes max(along + add, min). Silent if it changes nothing. */
+  private boost(b: BoostDef | undefined): void {
+    if (!b) return;
+    const v = this.player.vel;
+    const h = b.heading * DEG;
+    const fx = -Math.sin(h);
+    const fz = -Math.cos(h);
+    const along = v.x * fx + v.z * fz;
+    const gain = Math.max(along + b.add, b.min) - along;
+    const lift = b.up !== undefined && v.y < b.up;
+    if (gain <= 0 && !lift) return;
+    if (gain > 0) {
+      // Within sv_maxvelocity, as the movement code would clamp it next tick.
+      const m = this.cfg.maxVelocity;
+      v.x = Math.max(-m, Math.min(m, v.x + fx * gain));
+      v.z = Math.max(-m, Math.min(m, v.z + fz * gain));
+    }
+    if (lift) {
+      v.y = b.up as number;
+      this.player.onGround = false;
+    }
+    this.hooks.boosted?.(v.horizontalLength());
   }
 
   /** Interpolated eye position between the last two ticks. */

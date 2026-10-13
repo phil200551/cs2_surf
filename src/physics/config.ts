@@ -1,7 +1,8 @@
 /**
  * Every movement constant lives here: CS2 defaults plus the standard
  * surf-server overrides (sv_airaccelerate 150, sv_enablebunnyhopping 1,
- * sv_autobunnyhopping 1, sv_staminamax 0, sv_falldamage_scale 0).
+ * sv_autobunnyhopping 1, sv_staminamax 0, sv_falldamage_scale 0), and an
+ * sv_maxvelocity of 10000 instead of 3500 for a much higher top speed.
  *
  * Units are Source/Hammer units and seconds. +Y is up.
  */
@@ -24,7 +25,7 @@ export interface MovementConfig {
   airSpeedCap: number;
   /** Jump impulse: sqrt(2 * 800 * 57). */
   jumpVelocity: number;
-  /** sv_maxvelocity, clamped per axis. */
+  /** sv_maxvelocity, clamped per axis. Raised far above CS2's 3500 so speed keeps building. */
   maxVelocity: number;
   /** Max stair step height. */
   stepHeight: number;
@@ -64,7 +65,7 @@ export const DEFAULT_MOVEMENT: Readonly<MovementConfig> = Object.freeze({
   airAccelerate: 150,
   airSpeedCap: 30,
   jumpVelocity: 301.993,
-  maxVelocity: 3500,
+  maxVelocity: 10000,
   stepHeight: 18,
   duckSpeedMultiplier: 0.34,
   autoBhop: true,

@@ -1,4 +1,4 @@
-import type { BoxPrimitive, MaterialId, RampPrimitive, TriggerDef, TriggerKind, V3 } from './types';
+import type { BoostDef, BoxPrimitive, MaterialId, RampPrimitive, TriggerDef, TriggerKind, V3 } from './types';
 
 const DEG = Math.PI / 180;
 
@@ -148,4 +148,10 @@ export function zone(kind: TriggerKind, stage: number, center: V3, halfX: number
     return { kind, stage, min: { x: center.x - halfX, y: center.y - halfY, z: center.z - halfZ }, max: { x: center.x + halfX, y: center.y + halfY, z: center.z + halfZ } };
   }
   return { kind, stage, points: orientedBoxPoints(center, halfX, halfY, halfZ, headingDeg), obb: { center, halfX, halfY, halfZ, heading: headingDeg } };
+}
+
+/** Booster volume: an oriented box (always stored as points, so it can be drawn rotated). */
+export function boostZone(stage: number, center: V3, halfX: number, halfY: number, halfZ: number, boost: BoostDef): TriggerDef {
+  const h = boost.heading;
+  return { kind: 'boost', stage, points: orientedBoxPoints(center, halfX, halfY, halfZ, h), obb: { center, halfX, halfY, halfZ, heading: h }, boost };
 }

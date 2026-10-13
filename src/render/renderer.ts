@@ -22,17 +22,27 @@ import {
 import { CLIENT } from '../config';
 import type { CompiledMap } from '../map/compile';
 import type { Vec3 } from '../physics';
-import { createSurfaceMaterial, createTrimMaterial } from './materials';
+import { createSurfaceMaterial, createTrimMaterial, GRID_UNIFORMS } from './materials';
 import { buildMapGeometry } from './meshes';
 import { PALETTE } from './palette';
 import { installSkyFog, SkyDome, sunDirection } from './sky';
 import { ZoneMeshes } from './zones';
 
-/** Half-size of the sun's shadow frustum around the player, units. */
-const SHADOW_EXTENT = 2400;
+/** Half-size of the sun's shadow frustum around its focus, units. */
+const SHADOW_EXTENT = 3000;
 const SHADOW_MAP_SIZE = 2048;
 /** Distance from the shadow focus back toward the sun. */
 const SHADOW_DISTANCE = 9000;
+/**
+ * The shadow focus leads the player by this much of a second of travel (up
+ * to SHADOW_LEAD_MAX units), so at speed the shadows cover what is coming up
+ * rather than what is already behind.
+ */
+const SHADOW_LEAD_TIME = 0.3;
+const SHADOW_LEAD_MAX = 1800;
+/** Minor grid lines fade out between these horizontal speeds (u/s). */
+const GRID_FADE_START = 2600;
+const GRID_FADE_END = 4800;
 
 export interface RenderOptions {
   bloom: boolean;
@@ -59,6 +69,7 @@ export class GameRenderer {
   private readonly sunDir: Vector3;
   private readonly materials: Material[] = [];
   private readonly shadowFocus = new Vector3(Infinity, Infinity, Infinity);
+  private readonly focus = new Vector3();
   private readonly lightBasis = new Matrix4();
   private readonly lightBasisInv = new Matrix4();
   private readonly tmp = new Vector3();
@@ -202,7 +213,7 @@ export class GameRenderer {
   /** Compiles every shader variant up front so the run never hitches on a first use. */
   async precompile(eye: Vec3): Promise<void> {
     this.placeCamera(eye, 0, 0, 0);
-    this.updateShadowFocus(eye, true);
+    this.updateShadowFocus(this.focus.set(eye.x, eye.y, eye.z), true);
     await this.renderer.compileAsync(this.scene, this.camera);
     this.renderer.shadowMap.needsUpdate = true;
     this.composer.render();
@@ -220,11 +231,11 @@ export class GameRenderer {
    * texels in light space (no shimmering), and re-renders the shadow map only
    * when that snapped centre moves: the world is static.
    */
-  private updateShadowFocus(eye: Vec3, force = false): void {
+  private updateShadowFocus(focus: Vector3, force = false): void {
     if (!this.options.shadows) return;
     const texel = (SHADOW_EXTENT * 2) / SHADOW_MAP_SIZE;
     const step = texel * 64;
-    const p = this.tmp.set(eye.x, eye.y, eye.z).applyMatrix4(this.lightBasisInv);
+    const p = this.tmp.copy(focus).applyMatrix4(this.lightBasisInv);
     p.set(Math.round(p.x / step) * step, Math.round(p.y / step) * step, Math.round(p.z / step) * step);
     if (!force && p.equals(this.shadowFocus)) return;
     this.shadowFocus.copy(p);
@@ -236,9 +247,19 @@ export class GameRenderer {
     this.renderer.shadowMap.needsUpdate = true;
   }
 
-  render(eye: Vec3, yaw: number, pitch: number, time: number): void {
+  /** `vel` is the player's velocity: shadows lead it and the fine grid fades with speed. */
+  render(eye: Vec3, yaw: number, pitch: number, time: number, vel?: Vec3): void {
     this.placeCamera(eye, yaw, pitch, time);
-    this.updateShadowFocus(eye);
+    const f = this.focus.set(eye.x, eye.y, eye.z);
+    let speed = 0;
+    if (vel) {
+      speed = Math.hypot(vel.x, vel.z);
+      const lead = Math.min(speed * SHADOW_LEAD_TIME, SHADOW_LEAD_MAX);
+      if (speed > 1) f.set(eye.x + (vel.x / speed) * lead, eye.y, eye.z + (vel.z / speed) * lead);
+    }
+    this.updateShadowFocus(f);
+    const t = Math.min(1, Math.max(0, (speed - GRID_FADE_START) / (GRID_FADE_END - GRID_FADE_START)));
+    GRID_UNIFORMS.uGridMinor.value = 1 - t * t * (3 - 2 * t);
     this.zones.update(time);
     this.composer.render();
   }

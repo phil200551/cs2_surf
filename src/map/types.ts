@@ -62,7 +62,23 @@ export interface ConvexPrimitive extends PrimitiveBase {
 
 export type Primitive = BoxPrimitive | RampPrimitive | ConvexPrimitive;
 
-export type TriggerKind = 'start' | 'checkpoint' | 'end' | 'fail';
+export type TriggerKind = 'start' | 'checkpoint' | 'end' | 'fail' | 'boost';
+
+/**
+ * A booster, like a surf map's trigger_push but applied once, on entry: the
+ * velocity along `heading` becomes `max(along + add, min)`. Sideways and
+ * vertical velocity are kept, except that `up` (if set) raises the vertical
+ * velocity to at least that, lifting the player off the ground.
+ */
+export interface BoostDef {
+  /** Push direction, degrees (0 = -Z, + turns left). */
+  heading: number;
+  /** Speed added along the heading, u/s. */
+  add: number;
+  /** Along-heading speed is raised to at least this, u/s. */
+  min: number;
+  up?: number;
+}
 
 export interface TriggerDef {
   kind: TriggerKind;
@@ -75,6 +91,15 @@ export interface TriggerDef {
   points?: V3[];
   /** Oriented-box description of `points`, when it is one (used for drawing). */
   obb?: { center: V3; halfX: number; halfY: number; halfZ: number; heading: number };
+  /** Required for `boost` triggers. */
+  boost?: BoostDef;
+  /** Not drawn (zones are drawn as glowing volumes by default). */
+  hidden?: boolean;
+  /**
+   * Drawn as this box instead of the trigger volume. A `decal` is a marking
+   * on a surface, which stays bright up close (volumes fade near the camera).
+   */
+  display?: { center: V3; halfX: number; halfY: number; halfZ: number; heading: number; decal?: boolean };
 }
 
 export interface StageDef {

@@ -7,6 +7,13 @@ export const GRID_MINOR = 128;
 export const GRID_MAJOR = 512;
 
 /**
+ * Uniforms shared by every surface material. `uGridMinor` (0..1) weights the
+ * minor grid lines: the renderer fades them out at high speed, where lines
+ * 128 units apart passing more than half a spacing per frame would strobe.
+ */
+export const GRID_UNIFORMS = { uGridMinor: { value: 1 } };
+
+/**
  * Smooth, slightly glossy PBR surface in a stage colour, with an
  * antialiased world-space grid so speed is readable. The grid is projected on
  * the plane most facing each surface and fades out where it would alias.
@@ -24,6 +31,7 @@ export function createSurfaceMaterial(id: MaterialId): MeshPhysicalMaterial {
     envMapIntensity: PALETTE.envIntensity,
   });
   m.onBeforeCompile = (shader) => {
+    shader.uniforms.uGridMinor = GRID_UNIFORMS.uGridMinor;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vGridPos;\nvarying vec3 vGridNormal;')
       .replace(
@@ -36,6 +44,7 @@ export function createSurfaceMaterial(id: MaterialId): MeshPhysicalMaterial {
         /* glsl */ `#include <common>
         varying vec3 vGridPos;
         varying vec3 vGridNormal;
+        uniform float uGridMinor;
         // Antialiased grid lines: 1 on a line, 0 between, faded where too fine.
         float gridLines( vec2 p, float spacing, float halfWidth ) {
           vec2 c = p / spacing;
@@ -49,7 +58,7 @@ export function createSurfaceMaterial(id: MaterialId): MeshPhysicalMaterial {
         float surfaceGrid( vec3 p, vec3 n ) {
           vec3 a = abs( n );
           vec2 uv = a.x > a.y && a.x > a.z ? p.zy : ( a.y > a.z ? p.xz : p.xy );
-          return max( gridLines( uv, ${GRID_MINOR.toFixed(1)}, 1.0 ) * 0.6, gridLines( uv, ${GRID_MAJOR.toFixed(1)}, 1.8 ) );
+          return max( gridLines( uv, ${GRID_MINOR.toFixed(1)}, 1.0 ) * 0.6 * uGridMinor, gridLines( uv, ${GRID_MAJOR.toFixed(1)}, 1.8 ) );
         }`,
       )
       .replace(
@@ -59,7 +68,7 @@ export function createSurfaceMaterial(id: MaterialId): MeshPhysicalMaterial {
       );
   };
   // Distinct program cache key so the grid variant is never shared with plain materials.
-  m.customProgramCacheKey = () => 'surf-grid-v1';
+  m.customProgramCacheKey = () => 'surf-grid-v2';
   return m;
 }
 

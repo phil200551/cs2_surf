@@ -17,6 +17,9 @@ export interface DebugInfo {
 /** Bit flags for the key overlay. */
 export const KEY_W = 1, KEY_A = 2, KEY_S = 4, KEY_D = 8, KEY_JUMP = 16, KEY_DUCK = 32;
 
+/** Horizontal speeds (u/s) where the speedometer changes colour. */
+const SPEED_TIERS = [1500, 3000, 4500, 6000, 7500];
+
 /**
  * Plain-DOM heads-up display. Every setter only touches the DOM when the
  * shown value changes, so per-frame updates cost almost nothing.
@@ -24,6 +27,7 @@ export const KEY_W = 1, KEY_A = 2, KEY_S = 4, KEY_D = 8, KEY_JUMP = 16, KEY_DUCK
 export class Hud {
   readonly root: HTMLElement;
   private readonly speedEl: HTMLElement;
+  private readonly speedBox: HTMLElement;
   private readonly timerEl: HTMLElement;
   private readonly stageEl: HTMLElement;
   private readonly pbEl: HTMLElement;
@@ -32,6 +36,7 @@ export class Hud {
   private readonly keyEls: HTMLElement[];
   private readonly debugEl: HTMLElement;
   private lastSpeed = -1;
+  private lastTier = -1;
   private lastTimerText = '';
   private lastTimerState = '';
   private lastStage = '';
@@ -51,7 +56,7 @@ export class Hud {
       </div>
       <div class="message"></div>
       <div class="hud-bottom">
-        <div class="speed"><span class="speed-value">0</span><span class="speed-unit">u/s</span></div>
+        <div class="speed" data-tier="0"><span class="speed-value">0</span><span class="speed-unit">u/s</span></div>
         <div class="keys hidden">
           <div class="key-row"><span class="key" data-k="w">W</span></div>
           <div class="key-row"><span class="key" data-k="a">A</span><span class="key" data-k="s">S</span><span class="key" data-k="d">D</span></div>
@@ -61,6 +66,7 @@ export class Hud {
       <pre class="debug hidden"></pre>`;
     const q = (sel: string) => root.querySelector(sel) as HTMLElement;
     this.speedEl = q('.speed-value');
+    this.speedBox = q('.speed');
     this.timerEl = q('.timer');
     this.stageEl = q('.stage');
     this.pbEl = q('.pb');
@@ -74,12 +80,25 @@ export class Hud {
     this.root.style.visibility = visible ? 'visible' : 'hidden';
   }
 
-  /** Horizontal speed in u/s, shown as an integer. */
+  /** Horizontal speed in u/s, shown as an integer and coloured by tier. */
   setSpeed(speed: number): void {
     const v = Math.round(speed);
     if (v === this.lastSpeed) return;
     this.lastSpeed = v;
     this.speedEl.textContent = String(v);
+    let tier = 0;
+    while (tier < SPEED_TIERS.length && v >= SPEED_TIERS[tier]) tier++;
+    if (tier !== this.lastTier) {
+      this.lastTier = tier;
+      this.speedBox.dataset.tier = String(tier);
+    }
+  }
+
+  /** Brief pulse on the speedometer when a booster fires. */
+  flashBoost(): void {
+    this.speedBox.classList.remove('boosted');
+    void this.speedBox.offsetWidth; // restart the CSS animation
+    this.speedBox.classList.add('boosted');
   }
 
   setTimer(seconds: number, state: 'ready' | 'running' | 'finished'): void {

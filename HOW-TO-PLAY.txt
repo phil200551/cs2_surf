@@ -18,6 +18,11 @@ SKYLINE SURF - how to play on Windows
    input and Keyboard Lock, which stops Ctrl+W / Ctrl+D closing the tab or
    bookmarking it while you duck.
 
+4. Walk off the front of the start platform: the pink pad launches you onto
+   the first ramp at 2,000 u/s. Hold A (or D) toward the ramp to surf it, and
+   fly through the pink gates between ramps for more speed. You finish at
+   over 7,000 u/s; the speed cap is 10,000.
+
 Controls: WASD move / air strafe, mouse look, Space or wheel down jump
 (hold to bunny hop), Ctrl or C duck, R restart run, E restart stage,
 Esc menu, F3 debug overlay.
